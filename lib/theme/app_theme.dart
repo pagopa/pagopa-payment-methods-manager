@@ -104,11 +104,11 @@ class AppTheme {
 
         // Stile per i Chip (status pill)
         chipTheme: ChipThemeData(
-          backgroundColor: successColor.withOpacity(0.1),
-          labelStyle: const TextStyle(color: successColor, fontWeight: FontWeight.bold),
+          // backgroundColor: successColor.withOpacity(0.1),
+          // labelStyle: const TextStyle(color: successColor, fontWeight: FontWeight.bold),
           side: BorderSide.none,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          // padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         )
     );
   }

@@ -1,38 +1,73 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
+<html><body><script>
+    (function() {
+      let flutterScriptPromise = null;
+      function loadFlutterEngine() {
+        if (!flutterScriptPromise) {
+          flutterScriptPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = './flutter.js'; // Percorso relativo
+            script.defer = true;
+            document.head.appendChild(script);
+            script.onload = () => {
+              window._flutter.loader.loadEntrypoint().then(engineInitializer => resolve(engineInitializer));
+            };
+          });
+        }
+        return flutterScriptPromise;
+      }
 
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
+      class FlutterMessageComponent extends HTMLElement {
+        static _count = 0;
 
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+        constructor() {
+          super();
+          this.attachShadow({ mode: 'open' });
+          this._controller = null; // Il nostro controller Dart
+        }
 
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="$FLUTTER_BASE_HREF">
+        async connectedCallback() {
+          const hostId = `flutter-host-${FlutterMessageComponent._count++}`;
+          const hostElement = document.createElement('div');
+          hostElement.id = hostId;
+          hostElement.style.width = '100%';
+          hostElement.style.height = '100%';
+          this.shadowRoot.appendChild(hostElement);
 
-  <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="Payment Methods Manager">
+          const engineInitializer = await loadFlutterEngine();
+          const appRunner = await engineInitializer.initializeEngine({ hostElement: hostElement });
 
-  <!-- iOS meta tags & icons -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="payment_methods_manager">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+          // La nostra funzione Dart main.dart::main() viene compilata in JS come `main_dart.main`.
+          // La libreria `msal_js` fa qualcosa di simile.
+          // Dobbiamo trovare il nome corretto. Con l'approccio di `js_interop` è più facile.
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+          // Chiamiamo il nostro punto di ingresso Dart, passando l'ID dell'host
+          // Assumiamo che il nostro entrypoint sia `main_dart.mainForComponent`
+          // NOTA: Trovare il nome esatto della funzione compilata può essere complicato.
+          // Un approccio più semplice è usare una funzione globale di "registrazione"
+          window.registerFlutterInstance = (controller) => {
+            this._controller = controller;
+            this._updateMessage(); // Invia il messaggio iniziale
+          };
 
-  <title>payment_methods_manager</title>
-  <link rel="manifest" href="manifest.json">
-</head>
-<body>
-  <script src="flutter_bootstrap.js" async></script>
-</body>
-</html>
+          await appRunner.runApp();
+        }
+
+        attributeChangedCallback(name, oldValue, newValue) {
+          if (name === 'message' && oldValue !== newValue) {
+            this._updateMessage();
+          }
+        }
+
+        static get observedAttributes() { return ['message']; }
+
+        _updateMessage() {
+          if (this._controller) {
+            const message = this.getAttribute('message') || '';
+            this._controller.message = message;
+          }
+        }
+      }
+      customElements.define('flutter-message-component', FlutterMessageComponent);
+    })();
+</script></body></html>

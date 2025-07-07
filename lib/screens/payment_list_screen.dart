@@ -7,7 +7,9 @@ import '../providers/payment_provider.dart';
 import 'payment_form_screen.dart';
 
 class PaymentListScreen extends StatefulWidget {
-  const PaymentListScreen({super.key});
+  final String token;
+
+  const PaymentListScreen({super.key, required this.token});
 
   @override
   State<PaymentListScreen> createState() => _PaymentListScreenState();
@@ -140,7 +142,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Metodo di pagamento')),
+      appBar: AppBar(title:  Text('Metodo di pagamento ${widget.token}')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

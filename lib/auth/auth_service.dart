@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:msal_js/msal_js.dart';
 
 class AuthService extends ChangeNotifier {
-  static const String _clientId = '156820bb-8193-4cc8-86a8-b710fb6b6756'; // <-- INSERISCI QUI
+  static const String _clientId = 'b1081b7e-7c1e-4342-8c09-34c2cbcac224'; // <-- INSERISCI QUI
   static const String _authority = 'https://login.microsoftonline.com/7788edaf-0346-4068-9d79-c868aed15b3d'; // <-- INSERISCI QUI
 
   PublicClientApplication? _msal;

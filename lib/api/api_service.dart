@@ -7,13 +7,24 @@ class ApiService {
   // USA IL SERVER LOCALE COME DA SPECIFICA OPENAPI
   static const String _baseUrl = 'http://localhost:8080';
 
-  // INSERISCI QUI LA TUA API KEY
-  static const String _apiKey = 'LA_TUA_API_KEY';
+  String _authToken = ''; // Non più statico!
 
-  static final Map<String, String> _headers = {
-    'Content-Type': 'application/json',
-    // 'Ocp-Apim-Subscription-Key': _apiKey,
-  };
+  // Imposta il token dall'esterno
+  void setAuthToken(String token) {
+    _authToken = token;
+  }
+
+
+  Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+    if (_authToken.isNotEmpty) {
+      // Standard comune per i JWT
+      headers['Authorization'] = 'Bearer $_authToken';
+    }
+    return headers;
+  }
 
   // READ: Ottiene tutti i metodi di pagamento
   Future<List<PaymentMethod>> getPaymentMethods() async {

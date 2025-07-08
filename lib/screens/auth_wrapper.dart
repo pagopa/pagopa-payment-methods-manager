@@ -55,11 +55,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // altrimenti mostra la schermata di login.
     if (authService.isAuthenticated) {
       return FutureBuilder<String>(future: authService.getAccessToken(), builder: (context, AsyncSnapshot<String> snapshot) {
-        return PaymentListScreen(token: snapshot.data ?? '-');
+        return PaymentListScreen();
 
       });
     } else {
-      return PaymentListScreen(token: '',);
+      return PaymentListScreen();
     }
   }
 }

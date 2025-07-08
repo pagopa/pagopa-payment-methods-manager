@@ -6,6 +6,7 @@ import '../models/payment_method.dart';
 class PaymentProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
 
+  String _jwt = ''; // Campo privato per memorizzare il token
   List<PaymentMethod> _paymentMethods = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -66,6 +67,26 @@ class PaymentProvider with ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
+    }
+  }
+
+  void updateJwt(String newJwt) {
+    if (_jwt != newJwt) {
+      print('PaymentProvider: JWT aggiornato.');
+      _jwt = newJwt;
+
+      // Passa il nuovo token al servizio API
+      _apiService.setAuthToken(newJwt);
+
+      // Azione opzionale: ricarica i dati quando il token cambia.
+      // Questo è utile se l'utente ha appena effettuato il login.
+      if (newJwt.isNotEmpty) {
+        fetchPaymentMethods();
+      } else {
+        // Se il token viene rimosso (logout), pulisci i dati
+        _paymentMethods = [];
+        notifyListeners();
+      }
     }
   }
 }

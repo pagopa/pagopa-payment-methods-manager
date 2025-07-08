@@ -95,12 +95,12 @@ class AppTheme {
         ),
 
         // Stile delle Card
-        cardTheme: CardTheme(
-          elevation: 2,
-          shadowColor: Colors.black.withOpacity(0.05),
-          color: cardColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+        // cardTheme: CardTheme(
+        //   elevation: 2,
+        //   shadowColor: Colors.black.withOpacity(0.05),
+        //   color: cardColor,
+        //   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        // ),
 
         // Stile per i Chip (status pill)
         chipTheme: ChipThemeData(

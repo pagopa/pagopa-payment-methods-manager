@@ -1,11 +1,14 @@
 // lib/api/api_service.dart
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
+
 import '../models/payment_method.dart';
 
 class ApiService {
   // USA IL SERVER LOCALE COME DA SPECIFICA OPENAPI
-  static const String _baseUrl = 'http://localhost:8080';
+  static const String _baseUrl =
+      'https://api.dev.platform.pagopa.it/afm/marketplace-auth/v1';
 
   String _authToken = ''; // Non più statico!
 
@@ -14,20 +17,18 @@ class ApiService {
     _authToken = token;
   }
 
-
   Map<String, String> get _headers {
     final headers = {
       'Content-Type': 'application/json',
     };
-    if (_authToken.isNotEmpty) {
-      // Standard comune per i JWT
-      headers['Authorization'] = 'Bearer $_authToken';
-    }
+    // Standard comune per i JWT
+    headers['Authorization'] = 'Bearer $_authToken';
     return headers;
   }
 
   // READ: Ottiene tutti i metodi di pagamento
   Future<List<PaymentMethod>> getPaymentMethods() async {
+    print('token lungo ${_authToken.length}');
     final response = await http.get(
       Uri.parse('$_baseUrl/payment-methods'),
       headers: _headers,
@@ -41,7 +42,8 @@ class ApiService {
       final List<dynamic> data = json.decode(response.body) as List;
       return data.map((json) => PaymentMethod.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to load payment methods. Status: ${response.statusCode}');
+      throw Exception(
+          'Failed to load payment methods. Status: ${response.statusCode}');
     }
   }
 
@@ -58,12 +60,14 @@ class ApiService {
       // Se ritorna l'oggetto: return PaymentMethod.fromJson(json.decode(response.body));
       return paymentMethod; // Semplifichiamo
     } else {
-      throw Exception('Failed to create payment method. Status: ${response.statusCode}');
+      throw Exception(
+          'Failed to create payment method. Status: ${response.statusCode}');
     }
   }
 
   // UPDATE: Aggiorna un metodo di pagamento esistente
-  Future<PaymentMethod> updatePaymentMethod(String id, PaymentMethod paymentMethod) async {
+  Future<PaymentMethod> updatePaymentMethod(
+      String id, PaymentMethod paymentMethod) async {
     final response = await http.put(
       Uri.parse('$_baseUrl/payment-methods/$id'),
       headers: _headers,
@@ -74,7 +78,8 @@ class ApiService {
       // Come per create, l'API potrebbe ritornare l'oggetto aggiornato.
       return paymentMethod;
     } else {
-      throw Exception('Failed to update payment method. Status: ${response.statusCode}');
+      throw Exception(
+          'Failed to update payment method. Status: ${response.statusCode}');
     }
   }
 
@@ -87,7 +92,8 @@ class ApiService {
 
     // Una richiesta DELETE di successo di solito risponde con 200 (OK) o 204 (No Content).
     if (response.statusCode != 200 && response.statusCode != 204) {
-      throw Exception('Failed to delete payment method. Status: ${response.statusCode}');
+      throw Exception(
+          'Failed to delete payment method. Status: ${response.statusCode}');
     }
   }
 }

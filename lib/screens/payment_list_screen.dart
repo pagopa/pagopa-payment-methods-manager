@@ -165,6 +165,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
                 clipBehavior: Clip.antiAlias, // Assicura che i figli rispettino i bordi arrotondati
                 child: Consumer<PaymentProvider>(
                   builder: (context, provider, child) {
+                    print('riprinto il widget');
                     if (provider.isLoading && provider.paymentMethods.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }

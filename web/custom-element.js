@@ -1,27 +1,31 @@
 // custom-element.js
 
-// L'URL base dove risiede la nostra app Flutter
-const FLUTTER_BASE_URL = 'http://localhost:8000'; // <-- MODIFICA QUI
+const FLUTTER_BASE_URL = 'http://localhost:8000';
 
 const loadFlutterScript = new Promise((resolve, reject) => {
+  console.log("JS: Inizio caricamento script Flutter.");
   if (window._flutter) {
+    console.log("JS: _flutter già presente.");
     resolve(window._flutter);
     return;
   }
   const script = document.createElement('script');
-  // Usa l'URL assoluto
   script.src = `${FLUTTER_BASE_URL}/flutter.js`;
   script.defer = true;
   script.onload = () => {
-    _flutter.loader.loadEntrypoint({
-      // Specifica l'URL base anche qui per le risorse (es. canvaskit, assets)
+    console.log("JS: flutter.js caricato. Carico entrypoint...");
+    window._flutter.loader.loadEntrypoint({
       entrypointUrl: `${FLUTTER_BASE_URL}/main.dart.js`,
       onEntrypointLoaded: (engineInitializer) => {
+        console.log("JS: Entrypoint caricato. Risolvo la Promise.");
         resolve(engineInitializer);
       }
-    });
+    }).catch(reject);
   };
-  script.onerror = reject;
+  script.onerror = (err) => {
+    console.error("JS: Errore caricamento flutter.js", err);
+    reject(err);
+  };
   document.head.appendChild(script);
 });
 
@@ -36,58 +40,62 @@ class MyFlutterWidget extends HTMLElement {
     this._app = null;
   }
 
-  // Chiamato quando l'elemento viene aggiunto al DOM
   async connectedCallback() {
-    const engineInitializer = await loadFlutterScript;
+    console.log("JS: Elemento connesso al DOM. Inizio processo di avvio.");
+    try {
+      const engineInitializer = await loadFlutterScript;
+      console.log("JS: engineInitializer ottenuto. Inizializzo l'engine...");
 
-    // Inizializza l'app Flutter dentro il nostro 'div'
-    this._app = await engineInitializer.initializeEngine({
-      hostElement: this.hostElement,
-      assetBase: `${FLUTTER_BASE_URL}/`
+      this._app = await engineInitializer.initializeEngine({
+        hostElement: this.hostElement,
+        assetBase: FLUTTER_BASE_URL + '/'
+      });
 
-    });
+      console.log("JS: Engine inizializzato. Chiamo runApp()...");
 
-    // Avvia l'app Flutter
-    this._app.runApp();
+      // === IL PASSAGGIO CHIAVE ===
+      // Avviamo esplicitamente l'app Flutter.
+      // Questa chiamata eseguirà la funzione main() in Dart.
+      this._app.runApp();
 
-    // Passa il valore iniziale dell'attributo 'message'
-    if (this.hasAttribute('message')) {
-      this.updateFlutterMessage(this.getAttribute('message'));
+      console.log("JS: runApp() chiamato. L'app Flutter dovrebbe essere partita.");
+
+      // Ora che l'app è in esecuzione, possiamo passare i dati.
+      if (this.hasAttribute('jwt')) {
+        this.updateFlutterMessage(this.getAttribute('jwt'));
+      }
+    } catch (e) {
+      console.error('JS: ERRORE CRITICO durante l\'avvio di Flutter:', e);
     }
   }
 
-  // Definisce quali attributi osservare per i cambiamenti
   static get observedAttributes() {
-    return ['message'];
+    return ['jwt'];
   }
 
-  // Chiamato quando un attributo osservato cambia
   attributeChangedCallback(name, oldValue, newValue) {
-    if (name === 'message' && oldValue !== newValue) {
+    if (name === 'jwt' && oldValue !== newValue && this._app) {
       this.updateFlutterMessage(newValue);
     }
   }
 
-  // Funzione helper per chiamare la nostra funzione Dart esportata
-  updateFlutterMessage(message) {
-      // Aspettiamo che la funzione `updateJwt` sia disponibile su `window`
-      // (potrebbe non esserlo immediatamente al caricamento)
-      const checkAndUpdate = () => {
-        if (window.updateJwt) {
-            window.updateJwt(message);
-        } else {
-            setTimeout(checkAndUpdate, 50); // Riprova tra 50ms
-        }
+  updateFlutterMessage(jwt) {
+    // La strategia di polling è ancora la più sicura
+    const checkAndUpdate = () => {
+      if (window.updateJwt) {
+        console.log(`JS: ✅ Trovato window.updateJwt. Invio jwt`);
+        window.updateJwt(jwt);
+      } else {
+        console.warn("JS: ⏳ window.updateJwt non ancora pronto, riprovo tra 50ms...");
+        setTimeout(checkAndUpdate, 50);
       }
-      checkAndUpdate();
+    };
+    checkAndUpdate();
   }
 
-  // Chiamato quando l'elemento viene rimosso dal DOM
   disconnectedCallback() {
-    // Qui potresti aggiungere logica di pulizia se necessario
     console.log('MyFlutterWidget rimosso dal DOM.');
   }
 }
 
-// Definisce il nuovo tag HTML
-customElements.define('my-flutter-widget', MyFlutterWidget);
+customElements.define('payment-methods-manager', MyFlutterWidget);

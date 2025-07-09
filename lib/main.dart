@@ -1,21 +1,23 @@
 // lib/main.dart
 
+// 1. Aggiungi questo import!
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
 import 'package:flutter/material.dart';
 import 'package:js/js.dart';
-import 'package:provider/provider.dart';
-
-// 1. Aggiungi questo import!
-import 'dart:ui_web' as ui_web;
-
 import 'package:payment_methods_manager/providers/payment_provider.dart';
 import 'package:payment_methods_manager/screens/payment_list_screen.dart';
 import 'package:payment_methods_manager/theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import 'package:web/web.dart' as web;
 
 // Il tuo "ponte" da JS a Dart rimane identico
 final ValueNotifier<String> jwtNotifier = ValueNotifier('');
 
 @JS('updateJwt')
 void updateJwt(String jwt) {
+  print('DART RICEVE: Nuovo JWT: $jwt'); // Aggiungi log per conferma
   jwtNotifier.value = jwt;
 }
 
@@ -25,10 +27,11 @@ void main() {
   // che vengono integrate in un elemento specifico del DOM.
   // Si assicura che l'engine sia pronto e collegato a una vista
   // prima di eseguire runApp.
-    print('MAIN');
+  print('MAIN');
+  web.window.setProperty('updateJwt'.toJS, updateJwt.toJS);
   // ui_web.bootstrapEngine(runApp: () {
-    print('RUN APP');
-    runApp(const MyApp());
+  print('RUN APP');
+  runApp(const MyApp());
   // });
 }
 
@@ -44,8 +47,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProxyProvider<String, PaymentProvider>(
           create: (_) => PaymentProvider(),
           update: (context, jwt, previousProvider) {
-            return previousProvider!
-              ..updateJwt(jwt);
+            return previousProvider!..updateJwt(jwt);
           },
         ),
       ],

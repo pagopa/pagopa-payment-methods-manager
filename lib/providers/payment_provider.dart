@@ -21,7 +21,11 @@ class PaymentProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _paymentMethods = await _apiService.getPaymentMethods();
+      if(_jwt.isNotEmpty) {
+        _paymentMethods = await _apiService.getPaymentMethods();
+        _errorMessage = null;
+      }
+      print('PaymentProvider: Fetched ${_paymentMethods.length} payment methods.');
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -71,8 +75,8 @@ class PaymentProvider with ChangeNotifier {
   }
 
   void updateJwt(String newJwt) {
+    print('PaymentProvider: Nuovo JWT: $newJwt');
     if (_jwt != newJwt) {
-      print('PaymentProvider: JWT aggiornato.');
       _jwt = newJwt;
 
       // Passa il nuovo token al servizio API
@@ -85,8 +89,9 @@ class PaymentProvider with ChangeNotifier {
       } else {
         // Se il token viene rimosso (logout), pulisci i dati
         _paymentMethods = [];
-        notifyListeners();
+        // notifyListeners();
       }
+      notifyListeners();
     }
   }
 }

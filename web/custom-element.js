@@ -1,6 +1,6 @@
 // custom-element.js
 
-const FLUTTER_BASE_URL = 'http://localhost:8000';
+const FLUTTER_BASE_URL = 'https://pagopa.github.io/pagopa-payment-methods-manager';
 
 const loadFlutterScript = new Promise((resolve, reject) => {
   console.log("JS: Inizio caricamento script Flutter.");

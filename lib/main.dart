@@ -2,10 +2,9 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:flutter/material.dart';
-import 'package:js/js.dart';
 import 'package:payment_methods_manager/providers/api_provider.dart';
 import 'package:payment_methods_manager/screens/Structure.dart';
-import 'package:payment_methods_manager/screens/bundle_list_screen.dart';
+import 'package:payment_methods_manager/screens/payment_list_screen.dart';
 import 'package:payment_methods_manager/theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import 'package:web/web.dart' as web;
@@ -21,6 +20,7 @@ class AppConfig {
 
 @JS('updateConfig')
 void updateConfig(String jwt, String host) {
+  print('notifica ${jwt.length} ${host}');
   configNotifier.value = AppConfig(jwt: jwt, host: host);
 }
 

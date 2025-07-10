@@ -35,6 +35,7 @@ class ApiProvider with ChangeNotifier {
   String? get pspFilter => _pspFilter;
 
   List<PspBundleDetails> get filteredBundles {
+    print(_bundles.length);
     List<PspBundleDetails> result = List.from(_bundles);
 
     if (_pspFilter != null && _pspFilter!.isNotEmpty) {
@@ -62,7 +63,10 @@ class ApiProvider with ChangeNotifier {
   }
 
   void updateConfig({required String jwt, required String host}) {
-    if (_jwt != jwt || _host != host) {
+    if (_jwt != jwt && _host != host) {
+      print('provider ${jwt.length} ${host}');
+
+
       _jwt = jwt;
       _host = host;
 
@@ -70,7 +74,6 @@ class ApiProvider with ChangeNotifier {
       _apiService.setHost(_host);
 
       fetchPaymentMethods();
-      notifyListeners();
     }
   }
 
@@ -80,7 +83,8 @@ class ApiProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_jwt.isNotEmpty || _host.isEmpty) {
+      if (_jwt.isNotEmpty) {
+        print('fetchPaymentMethods $_host');
         _paymentMethods = await _apiService.getPaymentMethods();
         _errorMessage = null;
       }

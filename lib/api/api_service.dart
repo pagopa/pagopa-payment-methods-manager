@@ -21,82 +21,72 @@ class ApiService {
     _host = host;
   }
 
-    Map<String, String> get _headers {
-      final headers = {
-        'Content-Type': 'application/json',
-      };
-      headers['Authorization'] = 'Bearer $_authToken';
-      return headers;
-    }
+  Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+    };
+    headers['Authorization'] = 'Bearer $_authToken';
+    return headers;
+  }
 
-  String get path {
-    if (_host.isNotEmpty) {
-      return '$_host$_basePath';
-    }
-    else{
-      return 'http://localhost:8080';
+
+  Future<List<PaymentMethod>> getPaymentMethods() async {
+    final response = await http.get(
+      Uri.parse('$_host$_basePath/payment-methods'),
+      headers: _headers,
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = json.decode(response.body) as List;
+      return data.map((json) => PaymentMethod.fromJson(json)).toList();
+    } else {
+      throw Exception(
+          'Failed to load payment methods. Status: ${response.statusCode}');
     }
   }
 
-    Future<List<PaymentMethod>> getPaymentMethods() async {
-      final response = await http.get(
-        Uri.parse('$path/payment-methods'),
-        headers: _headers,
-      );
+  Future<PaymentMethod> createPaymentMethod(PaymentMethod paymentMethod) async {
+    final response = await http.post(
+      Uri.parse('$_host$_basePath/payment-methods'),
+      headers: _headers,
+      body: json.encode(paymentMethod.toJson()),
+    );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body) as List;
-        return data.map((json) => PaymentMethod.fromJson(json)).toList();
-      } else {
-        throw Exception(
-            'Failed to load payment methods. Status: ${response.statusCode}');
-      }
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return paymentMethod;
+    } else {
+      throw Exception(
+          'Failed to create payment method. Status: ${response.statusCode}');
     }
+  }
 
-    Future<PaymentMethod> createPaymentMethod(
-        PaymentMethod paymentMethod) async {
-      final response = await http.post(
-        Uri.parse('$path/payment-methods'),
-        headers: _headers,
-        body: json.encode(paymentMethod.toJson()),
-      );
+  Future<PaymentMethod> updatePaymentMethod(
+      String id, PaymentMethod paymentMethod) async {
+    final response = await http.put(
+      Uri.parse('$_host$_basePath/payment-methods/$id'),
+      headers: _headers,
+      body: json.encode(paymentMethod.toJson()),
+    );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return paymentMethod;
-      } else {
-        throw Exception(
-            'Failed to create payment method. Status: ${response.statusCode}');
-      }
+    if (response.statusCode == 200) {
+      return paymentMethod;
+    } else {
+      throw Exception(
+          'Failed to update payment method. Status: ${response.statusCode}');
     }
+  }
 
-    Future<PaymentMethod> updatePaymentMethod(String id,
-        PaymentMethod paymentMethod) async {
-      final response = await http.put(
-        Uri.parse('$path/payment-methods/$id'),
-        headers: _headers,
-        body: json.encode(paymentMethod.toJson()),
-      );
+  Future<void> deletePaymentMethod(String id) async {
+    final response = await http.delete(
+      Uri.parse('$_host$_basePath/payment-methods/$id'),
+      headers: _headers,
+    );
 
-      if (response.statusCode == 200) {
-        return paymentMethod;
-      } else {
-        throw Exception(
-            'Failed to update payment method. Status: ${response.statusCode}');
-      }
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(
+          'Failed to delete payment method. Status: ${response.statusCode}');
     }
-
-    Future<void> deletePaymentMethod(String id) async {
-      final response = await http.delete(
-        Uri.parse('$path/payment-methods/$id'),
-        headers: _headers,
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        throw Exception(
-            'Failed to delete payment method. Status: ${response.statusCode}');
-      }
-    }
-
+  }
 
   Future<BundlesResponse> getBundles({
     int page = 0,
@@ -124,7 +114,8 @@ class ApiService {
       queryParameters['expireAt'] = DateFormat('yyyy-MM-dd').format(expireAt);
     }
 
-    final uri = Uri.parse('${path}/bundles').replace(queryParameters: queryParameters);
+    final uri =
+        Uri.parse('$_host$_basePath/bundles').replace(queryParameters: queryParameters);
 
     final response = await http.get(uri, headers: _headers);
 
@@ -136,13 +127,14 @@ class ApiService {
   }
 
   Future<PspBundleDetails> getBundleDetails(String bundleId) async {
-    final uri = Uri.parse('$path/bundles/$bundleId');
+    final uri = Uri.parse('$_host$_basePath/bundles/$bundleId');
     final response = await http.get(uri, headers: _headers);
 
     if (response.statusCode == 200) {
       return PspBundleDetails.fromJson(json.decode(response.body));
     } else {
-      throw Exception('Failed to load bundle details. Status: ${response.statusCode}');
+      throw Exception(
+          'Failed to load bundle details. Status: ${response.statusCode}');
     }
   }
-  }
+}

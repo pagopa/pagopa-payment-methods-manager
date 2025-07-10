@@ -72,7 +72,6 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
-          Expanded(flex: 1, child: Text('LOGO', style: headerStyle)),
           Expanded(flex: 2, child: Text('NOME', style: headerStyle)),
           Expanded(flex: 1, child: Text('GRUPPO', style: headerStyle)),
           Expanded(flex: 1, child: Text('STATO', style: headerStyle)),
@@ -96,14 +95,6 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
         ),
         child: Row(
           children: [
-            Expanded(
-                flex: 1,
-                child: method.paymentMethodAsset != null
-                    ? SizedBox(
-                        height: 25,
-                        width: 25,
-                        child: Image.network(method.paymentMethodAsset!))
-                    : Icon(Icons.broken_image_outlined)),
             Expanded(
                 flex: 2,
                 child: Text(method.displayName,
@@ -180,6 +171,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: Consumer<ApiProvider>(
                   builder: (context, provider, child) {
+                    print('consumo evento');
                     if (provider.isLoading && provider.paymentMethods.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }

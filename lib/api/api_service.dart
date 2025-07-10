@@ -95,6 +95,7 @@ class ApiService {
     List<String>? types,
     DateTime? validFrom,
     DateTime? expireAt,
+    bool? active,
   }) async {
     final Map<String, dynamic> queryParameters = {
       'page': page.toString(),
@@ -112,6 +113,9 @@ class ApiService {
     }
     if (expireAt != null) {
       queryParameters['expireAt'] = DateFormat('yyyy-MM-dd').format(expireAt);
+    }
+    if (active != null) {
+      queryParameters['active'] = active;
     }
 
     final uri =

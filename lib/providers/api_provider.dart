@@ -170,10 +170,10 @@ class ApiProvider with ChangeNotifier {
     DateTime? validFrom;
     DateTime? expireAt;
     final now = DateTime.now();
+    bool? active;
 
     if (_statusFilter == BundleStatusFilter.active) {
-      validFrom = now.subtract(const Duration(days: 3600));
-      expireAt = now.add(const Duration(days: 3600));
+      active = true;
     } else if (_statusFilter == BundleStatusFilter.expired) {
       expireAt = now.subtract(const Duration(days: 1));
     } else if (_statusFilter == BundleStatusFilter.future) {
@@ -186,7 +186,8 @@ class ApiProvider with ChangeNotifier {
           name: _nameFilter,
           types: _typesFilter,
           validFrom: validFrom,
-          expireAt: expireAt);
+          expireAt: expireAt,
+          active: active);
       _bundles.addAll(response.bundles);
       _currentPage++;
       _hasMore = _bundles.length <

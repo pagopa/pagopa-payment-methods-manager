@@ -20,7 +20,6 @@ class AppConfig {
 
 @JS('updateConfig')
 void updateConfig(String jwt, String host) {
-  print('notifica ${jwt.length} ${host}');
   configNotifier.value = AppConfig(jwt: jwt, host: host);
 }
 

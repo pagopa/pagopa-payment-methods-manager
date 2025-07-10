@@ -31,7 +31,7 @@ class ApiService {
 
   String get path {
     if (_host.isNotEmpty) {
-      return '$_host/$_basePath';
+      return '$_host$_basePath';
     }
     else{
       return 'http://localhost:8080';

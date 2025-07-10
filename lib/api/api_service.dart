@@ -7,8 +7,7 @@ import '../models/payment_method.dart';
 
 class ApiService {
   // USA IL SERVER LOCALE COME DA SPECIFICA OPENAPI
-  static const String _baseUrl =
-      'https://api.dev.platform.pagopa.it/afm/marketplace-auth/v1';
+  static const String _basePath = '/afm/marketplace-auth/v1';
 
   String _authToken = ''; // Non più statico!
   String _host = ''; // Non più statico!
@@ -35,7 +34,7 @@ class ApiService {
   Future<List<PaymentMethod>> getPaymentMethods() async {
     print('token lungo ${_authToken.length}');
     final response = await http.get(
-      Uri.parse('$_baseUrl/payment-methods'),
+      Uri.parse('$_host/$_basePath/payment-methods'),
       headers: _headers,
     );
 
@@ -55,7 +54,7 @@ class ApiService {
   // CREATE: Crea un nuovo metodo di pagamento
   Future<PaymentMethod> createPaymentMethod(PaymentMethod paymentMethod) async {
     final response = await http.post(
-      Uri.parse('$_baseUrl/payment-methods'),
+      Uri.parse('$_host/$_basePath/payment-methods'),
       headers: _headers,
       body: json.encode(paymentMethod.toJson()),
     );
@@ -74,7 +73,7 @@ class ApiService {
   Future<PaymentMethod> updatePaymentMethod(
       String id, PaymentMethod paymentMethod) async {
     final response = await http.put(
-      Uri.parse('$_baseUrl/payment-methods/$id'),
+      Uri.parse('$_host/$_basePath/payment-methods/$id'),
       headers: _headers,
       body: json.encode(paymentMethod.toJson()),
     );
@@ -91,7 +90,7 @@ class ApiService {
   // DELETE: Elimina un metodo di pagamento
   Future<void> deletePaymentMethod(String id) async {
     final response = await http.delete(
-      Uri.parse('$_baseUrl/payment-methods/$id'),
+      Uri.parse('$_host/$_basePath/payment-methods/$id'),
       headers: _headers,
     );
 

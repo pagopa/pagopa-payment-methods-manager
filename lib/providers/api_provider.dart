@@ -1,5 +1,6 @@
 // lib/providers/payment_provider.dart
 import 'package:flutter/material.dart';
+import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 import '../api/api_service.dart';
 import '../models/payment_method.dart';
 
@@ -8,13 +9,36 @@ class PaymentProvider with ChangeNotifier {
 
   String _jwt = '';
   String _host = '';
-  List<PaymentMethod> _paymentMethods = [];
-  bool _isLoading = false;
-  String? _errorMessage;
 
+  List<PaymentMethod> _paymentMethods = [];
   List<PaymentMethod> get paymentMethods => _paymentMethods;
+
+  List<PspBundleDetails> _bundles = [];
+  List<PspBundleDetails> get bundles => _bundles;
+
+  PspBundleDetails? _selectedBundle;
+  PspBundleDetails? get selectedBundle => _selectedBundle;
+
+  bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  void updateConfig({required String jwt, required String host}) {
+    if (_jwt != jwt || _host != host) {
+      print('PaymentProvider: Configurazione aggiornata. JWT: $jwt, Host: $host');
+      _jwt = jwt;
+      _host = host;
+
+      _apiService.setAuthToken(_jwt);
+      _apiService.setHost(_host);
+
+      fetchPaymentMethods();
+
+      notifyListeners();
+    }
+  }
 
   Future<void> fetchPaymentMethods() async {
     _isLoading = true;
@@ -22,7 +46,7 @@ class PaymentProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if(_jwt.isNotEmpty) {
+      if(_jwt.isNotEmpty || _host.isEmpty) {
         _paymentMethods = await _apiService.getPaymentMethods();
         _errorMessage = null;
       }
@@ -76,17 +100,36 @@ class PaymentProvider with ChangeNotifier {
   }
 
 
-  void updateConfig({required String jwt, required String host}) {
-    if (_jwt != jwt || _host != host) {
-      print('PaymentProvider: Configurazione aggiornata. JWT: $jwt, Host: $host');
-      _jwt = jwt;
-      _host = host;
+  Future<void> fetchBundles() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
 
-      _apiService.setAuthToken(_jwt);
-      _apiService.setHost(_host);
+    try {
+      final response = await _apiService.getGlobalBundles();
+      _bundles = response.bundles;
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
-      fetchPaymentMethods();
+  Future<void> fetchBundleDetails(String bundleId) async {
+    _isLoading = true;
+    _selectedBundle = null;
+    _errorMessage = null;
+    notifyListeners();
 
+    try {
+      _selectedBundle = await _apiService.getBundleDetails(bundleId);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }

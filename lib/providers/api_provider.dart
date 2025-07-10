@@ -172,7 +172,8 @@ class ApiProvider with ChangeNotifier {
     final now = DateTime.now();
 
     if (_statusFilter == BundleStatusFilter.active) {
-      validFrom = now;
+      validFrom = now.subtract(const Duration(days: 3600));
+      expireAt = now.add(const Duration(days: 3600));
     } else if (_statusFilter == BundleStatusFilter.expired) {
       expireAt = now.subtract(const Duration(days: 1));
     } else if (_statusFilter == BundleStatusFilter.future) {

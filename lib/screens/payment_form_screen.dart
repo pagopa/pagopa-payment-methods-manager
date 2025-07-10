@@ -1,15 +1,13 @@
-// lib/screens/payment_form_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/payment_method.dart';
-import '../providers/payment_provider.dart';
+import '../providers/api_provider.dart';
 import '../widget/DynamicKeyValueFields.dart';
 import '../widget/DynamicMultilangField.dart';
 import '../widget/DynamicStringListFields.dart';
 
-// DX: Spostare le opzioni statiche in costanti per migliore manutenibilità e leggibilità.
 const _groupOptions = [
   'CP',
   'MYBK',
@@ -41,7 +39,6 @@ class PaymentFormScreen extends StatefulWidget {
 }
 
 class _PaymentFormScreenState extends State<PaymentFormScreen> {
-  // DX: Chiavi separate per ogni step del form per una validazione granulare.
   final _formKeys = [
     GlobalKey<FormState>(),
     GlobalKey<FormState>(),
@@ -50,11 +47,9 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
 
   bool get _isEditing => widget.paymentMethod != null;
 
-  // UX: Stato per lo stepper e per il caricamento
   int _currentStep = 0;
   bool _isLoading = false;
 
-  // Controllers e dati per il form (invariati)
   late TextEditingController _paymentMethodIdController;
   late TextEditingController _paymentMethodAssetController;
   late TextEditingController _minAmountController;
@@ -110,7 +105,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   }
 
   Future<void> _submitForm() async {
-    // UX: Validare tutti gli step prima di procedere
     bool allFormsValid = true;
     for (var formKey in _formKeys) {
       if (!formKey.currentState!.validate()) {
@@ -127,9 +121,8 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
 
     setState(() => _isLoading = true);
 
-    // Salvataggio e pulizia dati (logica invariata)
     _formKeys.forEach((key) => key.currentState!.save());
-    final provider = Provider.of<PaymentProvider>(context, listen: false);
+    final provider = Provider.of<ApiProvider>(context, listen: false);
 
     _nameMap.removeWhere((key, value) => value.trim().isEmpty);
     _descriptionMap.removeWhere((key, value) => value.trim().isEmpty);
@@ -181,13 +174,11 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     }
   }
 
-  // UX: Funzioni di controllo per lo Stepper
   void _onStepContinue() {
     if (_formKeys[_currentStep].currentState!.validate()) {
       if (_currentStep < _getSteps().length - 1) {
         setState(() => _currentStep += 1);
       } else {
-        // Siamo all'ultimo step, esegui il submit
         _submitForm();
       }
     }
@@ -198,7 +189,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
       setState(() => _currentStep -= 1);
     } else {
       Navigator.of(context)
-          .pop(); // Se sono al primo step, "Annulla" chiude la schermata
+          .pop();
     }
   }
 
@@ -209,19 +200,16 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
         title: Text(_isEditing ? 'Dettaglio metodo' : 'Nuovo metodo'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          // UX: Un'icona 'close' è più chiara per annullare
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: Stepper(
-        // DX: Lo stepper organizza il form in modo pulito
         currentStep: _currentStep,
         onStepContinue: _onStepContinue,
         onStepCancel: _onStepCancel,
         onStepTapped: (step) => setState(() => _currentStep = step),
         type: StepperType.vertical,
         steps: _getSteps(),
-        // UX: Personalizzazione dei bottoni dello stepper
         controlsBuilder: (context, details) {
           return Padding(
             padding: const EdgeInsets.only(top: 24.0),
@@ -253,7 +241,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     );
   }
 
-  // DX: La lista di Step è generata da una funzione per rendere il build method più pulito.
   List<Step> _getSteps() => [
         Step(
           title: const Text('Informazioni di Base'),
@@ -261,7 +248,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
             key: _formKeys[0],
             child: Column(
               children: [
-                // UX: Sostituzione con il nuovo widget dinamico
                 DynamicMultilangField(
                   label: 'Nome Metodo',
                   initialData: _nameMap,
@@ -269,7 +255,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
                   isRequired: true,
                 ),
                 const SizedBox(height: 16),
-                // UX: Sostituzione con il nuovo widget dinamico
                 DynamicMultilangField(
                   label: 'Descrizione',
                   initialData: _descriptionMap,
@@ -374,9 +359,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
         ),
       ];
 
-  // --- NUOVI WIDGET DI BUILD MIGLIORATI ---
-
-  // UX: Widget compatto per campi multilingua
   Widget _buildMultilangField(
       {required String label,
       required Map<String, String> map,
@@ -418,7 +400,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     );
   }
 
-  // UX: Sostituisce i Checkbox con i ChoiceChip, più moderni e compatti.
   Widget _buildChoiceChipGroup(
       String title, List<String> options, Set<String> selectedValues,
       {bool isRequired = false}) {
@@ -469,7 +450,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     );
   }
 
-  // Widget originali leggermente adattati
   Widget _buildDropdown(List<String> items, String label, String? currentValue,
       ValueChanged<String?> onChanged,
       {bool isRequired = false}) {
@@ -536,7 +516,6 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
               if (value != null &&
                   value.isNotEmpty &&
                   int.tryParse(value) == null) return 'Numero non valido';
-              // UX: Aggiungere validazione logica
               if (_maxAmountController.text.isNotEmpty &&
                   int.tryParse(value ?? '') != null &&
                   int.parse(value!) > int.parse(_maxAmountController.text)) {

@@ -1,33 +1,68 @@
-// lib/providers/payment_provider.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 import '../api/api_service.dart';
 import '../models/payment_method.dart';
 
-class PaymentProvider with ChangeNotifier {
+enum BundleStatusFilter { all, active, future, expired }
+
+class ApiProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
 
   String _jwt = '';
   String _host = '';
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
 
   List<PaymentMethod> _paymentMethods = [];
   List<PaymentMethod> get paymentMethods => _paymentMethods;
 
   List<PspBundleDetails> _bundles = [];
-  List<PspBundleDetails> get bundles => _bundles;
-
   PspBundleDetails? _selectedBundle;
   PspBundleDetails? get selectedBundle => _selectedBundle;
+  int _currentPage = 0;
+  bool _hasMore = true;
 
-  bool _isLoading = false;
-  bool get isLoading => _isLoading;
+  String? _nameFilter;
+  String? get nameFilter => _nameFilter;
+  List<String>? _typesFilter;
+  List<String>? get typesFilter => _typesFilter;
+  BundleStatusFilter _statusFilter = BundleStatusFilter.all;
+  BundleStatusFilter get statusFilter => _statusFilter;
+  String? _pspFilter;
+  String? get pspFilter => _pspFilter;
 
-  String? _errorMessage;
-  String? get errorMessage => _errorMessage;
+  List<PspBundleDetails> get filteredBundles {
+    List<PspBundleDetails> result = List.from(_bundles);
+
+    if (_pspFilter != null && _pspFilter!.isNotEmpty) {
+      result = result.where((bundle) {
+        final pspCode = bundle.idPsp?.toLowerCase() ?? '';
+        final pspName = bundle.pspBusinessName?.toLowerCase() ?? pspCode;
+        var filter = _pspFilter!.toLowerCase();
+        return pspName.contains(filter);
+      }).toList();
+    }
+    return result;
+  }
+
+  List<String> get uniquePspNames {
+    if (_bundles.isEmpty) return [];
+    final pspSet = <String>{};
+    for (var bundle in _bundles) {
+      if (bundle.pspBusinessName != null && bundle.pspBusinessName!.isNotEmpty) {
+        pspSet.add(bundle.pspBusinessName!);
+      }
+    }
+    final pspList = pspSet.toList();
+    pspList.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return pspList;
+  }
 
   void updateConfig({required String jwt, required String host}) {
     if (_jwt != jwt || _host != host) {
-      print('PaymentProvider: Configurazione aggiornata. JWT: $jwt, Host: $host');
       _jwt = jwt;
       _host = host;
 
@@ -35,7 +70,6 @@ class PaymentProvider with ChangeNotifier {
       _apiService.setHost(_host);
 
       fetchPaymentMethods();
-
       notifyListeners();
     }
   }
@@ -46,11 +80,10 @@ class PaymentProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if(_jwt.isNotEmpty || _host.isEmpty) {
+      if (_jwt.isNotEmpty || _host.isEmpty) {
         _paymentMethods = await _apiService.getPaymentMethods();
         _errorMessage = null;
       }
-      print('PaymentProvider: Fetched ${_paymentMethods.length} payment methods.');
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -62,12 +95,10 @@ class PaymentProvider with ChangeNotifier {
   Future<void> addPaymentMethod(PaymentMethod method) async {
     try {
       await _apiService.createPaymentMethod(method);
-      // Ricarica la lista per mostrare il nuovo elemento
       await fetchPaymentMethods();
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
-      // Rilancia l'eccezione per farla gestire dalla UI se necessario
       rethrow;
     }
   }
@@ -75,7 +106,6 @@ class PaymentProvider with ChangeNotifier {
   Future<void> updateExistingPaymentMethod(String id, PaymentMethod method) async {
     try {
       await _apiService.updatePaymentMethod(id, method);
-      // Ricarica la lista per mostrare l'elemento aggiornato
       await fetchPaymentMethods();
     } catch (e) {
       _errorMessage = e.toString();
@@ -84,36 +114,14 @@ class PaymentProvider with ChangeNotifier {
     }
   }
 
-  // NUOVO METODO PER IL DELETE
   Future<void> deletePaymentMethod(String id) async {
     try {
       await _apiService.deletePaymentMethod(id);
-      // Rimuovi l'elemento dalla lista locale per un aggiornamento istantaneo della UI,
-      // oppure ricarica tutto con fetchPaymentMethods() per la massima consistenza.
-      // Scegliamo la seconda opzione per semplicità e robustezza.
       await fetchPaymentMethods();
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
-    }
-  }
-
-
-  Future<void> fetchBundles() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      final response = await _apiService.getGlobalBundles();
-      _bundles = response.bundles;
-      _errorMessage = null;
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
@@ -130,6 +138,69 @@ class PaymentProvider with ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchMoreBundles({bool isRefresh = false}) async {
+    if (isRefresh) {
+      _currentPage = 0;
+      _bundles = [];
+      _hasMore = true;
+      _errorMessage = null;
+    }
+
+    if (_isLoading || !_hasMore) return;
+
+    _isLoading = true;
+    notifyListeners();
+
+    DateTime? validFrom;
+    DateTime? expireAt;
+    final now = DateTime.now();
+
+    if (_statusFilter == BundleStatusFilter.active) {
+      validFrom = now;
+    } else if (_statusFilter == BundleStatusFilter.expired) {
+      expireAt = now.subtract(const Duration(days: 1));
+    } else if (_statusFilter == BundleStatusFilter.future) {
+      validFrom = now.add(const Duration(days: 1));
+    }
+
+    try {
+      final response = await _apiService.getBundles(
+          page: _currentPage,
+          name: _nameFilter,
+          types: _typesFilter,
+          validFrom: validFrom,
+          expireAt: expireAt);
+      _bundles.addAll(response.bundles);
+      _currentPage++;
+      _hasMore = _bundles.length < (response.pageInfo.total_items ?? _bundles.length + 1);
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void setFilters({String? name, List<String>? types, BundleStatusFilter? status, String? psp}) {
+    final bool apiFiltersChanged =
+        _nameFilter != name ||
+            _typesFilter.toString() != (types ?? []).toString() ||
+            _statusFilter != (status ?? BundleStatusFilter.all);
+
+    final bool pspFilterChanged = _pspFilter != psp;
+
+    _nameFilter = name;
+    _typesFilter = types;
+    _statusFilter = status ?? BundleStatusFilter.all;
+    _pspFilter = psp;
+
+    if (apiFiltersChanged) {
+      fetchMoreBundles(isRefresh: true);
+    } else if (pspFilterChanged) {
       notifyListeners();
     }
   }

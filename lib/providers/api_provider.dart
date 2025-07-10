@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
+
 import '../api/api_service.dart';
 import '../models/payment_method.dart';
 
@@ -12,26 +12,34 @@ class ApiProvider with ChangeNotifier {
   String _jwt = '';
   String _host = '';
   bool _isLoading = false;
+
   bool get isLoading => _isLoading;
   String? _errorMessage;
+
   String? get errorMessage => _errorMessage;
 
   List<PaymentMethod> _paymentMethods = [];
+
   List<PaymentMethod> get paymentMethods => _paymentMethods;
 
   List<PspBundleDetails> _bundles = [];
   PspBundleDetails? _selectedBundle;
+
   PspBundleDetails? get selectedBundle => _selectedBundle;
   int _currentPage = 0;
   bool _hasMore = true;
 
   String? _nameFilter;
+
   String? get nameFilter => _nameFilter;
   List<String>? _typesFilter;
+
   List<String>? get typesFilter => _typesFilter;
   BundleStatusFilter _statusFilter = BundleStatusFilter.all;
+
   BundleStatusFilter get statusFilter => _statusFilter;
   String? _pspFilter;
+
   String? get pspFilter => _pspFilter;
 
   List<PspBundleDetails> get filteredBundles {
@@ -53,7 +61,8 @@ class ApiProvider with ChangeNotifier {
     if (_bundles.isEmpty) return [];
     final pspSet = <String>{};
     for (var bundle in _bundles) {
-      if (bundle.pspBusinessName != null && bundle.pspBusinessName!.isNotEmpty) {
+      if (bundle.pspBusinessName != null &&
+          bundle.pspBusinessName!.isNotEmpty) {
         pspSet.add(bundle.pspBusinessName!);
       }
     }
@@ -63,18 +72,16 @@ class ApiProvider with ChangeNotifier {
   }
 
   void updateConfig({required String jwt, required String host}) {
-    if (_jwt != jwt && _host != host) {
-      print('provider ${jwt.length} ${host}');
+    print('provider ${jwt.length} ${host}');
 
+    _jwt = jwt;
+    _host = host;
 
-      _jwt = jwt;
-      _host = host;
+    _apiService.setAuthToken(_jwt);
+    _apiService.setHost(_host);
 
-      _apiService.setAuthToken(_jwt);
-      _apiService.setHost(_host);
-
-      fetchPaymentMethods();
-    }
+    fetchMoreBundles(isRefresh: true);
+    fetchPaymentMethods();
   }
 
   Future<void> fetchPaymentMethods() async {
@@ -107,7 +114,8 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  Future<void> updateExistingPaymentMethod(String id, PaymentMethod method) async {
+  Future<void> updateExistingPaymentMethod(
+      String id, PaymentMethod method) async {
     try {
       await _apiService.updatePaymentMethod(id, method);
       await fetchPaymentMethods();
@@ -180,7 +188,8 @@ class ApiProvider with ChangeNotifier {
           expireAt: expireAt);
       _bundles.addAll(response.bundles);
       _currentPage++;
-      _hasMore = _bundles.length < (response.pageInfo.total_items ?? _bundles.length + 1);
+      _hasMore = _bundles.length <
+          (response.pageInfo.total_items ?? _bundles.length + 1);
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -189,11 +198,14 @@ class ApiProvider with ChangeNotifier {
     }
   }
 
-  void setFilters({String? name, List<String>? types, BundleStatusFilter? status, String? psp}) {
-    final bool apiFiltersChanged =
-        _nameFilter != name ||
-            _typesFilter.toString() != (types ?? []).toString() ||
-            _statusFilter != (status ?? BundleStatusFilter.all);
+  void setFilters(
+      {String? name,
+      List<String>? types,
+      BundleStatusFilter? status,
+      String? psp}) {
+    final bool apiFiltersChanged = _nameFilter != name ||
+        _typesFilter.toString() != (types ?? []).toString() ||
+        _statusFilter != (status ?? BundleStatusFilter.all);
 
     final bool pspFilterChanged = _pspFilter != psp;
 

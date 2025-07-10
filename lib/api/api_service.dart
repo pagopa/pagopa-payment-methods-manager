@@ -11,10 +11,15 @@ class ApiService {
       'https://api.dev.platform.pagopa.it/afm/marketplace-auth/v1';
 
   String _authToken = ''; // Non più statico!
+  String _host = ''; // Non più statico!
 
   // Imposta il token dall'esterno
   void setAuthToken(String token) {
     _authToken = token;
+  }
+
+  void setHost(String host) {
+    _host = host;
   }
 
   Map<String, String> get _headers {

@@ -13,12 +13,21 @@ import 'package:provider/provider.dart';
 import 'package:web/web.dart' as web;
 
 // Il tuo "ponte" da JS a Dart rimane identico
-final ValueNotifier<String> jwtNotifier = ValueNotifier('');
+final ValueNotifier<AppConfig> configNotifier = ValueNotifier(AppConfig());
 
-@JS('updateJwt')
-void updateJwt(String jwt) {
-  print('DART RICEVE: Nuovo JWT: $jwt'); // Aggiungi log per conferma
-  jwtNotifier.value = jwt;
+class AppConfig {
+  final String jwt;
+  final String host;
+
+  AppConfig({this.jwt = '', this.host = ''});
+}
+
+@JS('updateConfig')
+void updateConfig(String jwt, String host) {
+  print('DART RICEVE: Nuovo config -> JWT: $jwt, Host: $host');
+
+  // Aggiorna il nostro notifier con un nuovo oggetto AppConfig.
+  configNotifier.value = AppConfig(jwt: jwt, host: host);
 }
 
 // 2. Modifica la funzione main in questo modo
@@ -28,7 +37,7 @@ void main() {
   // Si assicura che l'engine sia pronto e collegato a una vista
   // prima di eseguire runApp.
   print('MAIN');
-  web.window.setProperty('updateJwt'.toJS, updateJwt.toJS);
+  web.window.setProperty('updateConfig'.toJS, updateConfig.toJS);
   // ui_web.bootstrapEngine(runApp: () {
   print('RUN APP');
   runApp(const MyApp());
@@ -43,11 +52,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ValueListenableProvider<String>.value(value: jwtNotifier),
-        ChangeNotifierProxyProvider<String, PaymentProvider>(
+        ValueListenableProvider<AppConfig>.value(value: configNotifier),
+        ChangeNotifierProxyProvider<AppConfig, PaymentProvider>(
           create: (_) => PaymentProvider(),
-          update: (context, jwt, previousProvider) {
-            return previousProvider!..updateJwt(jwt);
+          update: (context, config, previousProvider) {
+            // Quando la configurazione cambia, aggiorna il tuo provider
+            // passando sia il jwt che l'host.
+            return previousProvider!
+              ..updateConfig(jwt: config.jwt, host: config.host);
           },
         ),
       ],

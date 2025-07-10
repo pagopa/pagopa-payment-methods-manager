@@ -61,8 +61,8 @@ class MyFlutterWidget extends HTMLElement {
       console.log("JS: runApp() chiamato. L'app Flutter dovrebbe essere partita.");
 
       // Ora che l'app è in esecuzione, possiamo passare i dati.
-      if (this.hasAttribute('jwt')) {
-        this.updateFlutterMessage(this.getAttribute('jwt'));
+        if (this.hasAttribute('jwt') && this.hasAttribute('host')) {
+        this.updateFlutterMessage(this.getAttribute('jwt'), this.getAttribute('host'));
       }
     } catch (e) {
       console.error('JS: ERRORE CRITICO durante l\'avvio di Flutter:', e);
@@ -79,12 +79,12 @@ class MyFlutterWidget extends HTMLElement {
     }
   }
 
-  updateFlutterMessage(jwt) {
+  updateFlutterMessage(jwt, host) {
     // La strategia di polling è ancora la più sicura
     const checkAndUpdate = () => {
-      if (window.updateJwt) {
+      if (window.updateConfig) {
         console.log(`JS: ✅ Trovato window.updateJwt. Invio jwt`);
-        window.updateJwt(jwt);
+        window.updateConfig(jwt, host);
       } else {
         console.warn("JS: ⏳ window.updateJwt non ancora pronto, riprovo tra 50ms...");
         setTimeout(checkAndUpdate, 50);

@@ -115,7 +115,7 @@ class ApiService {
       queryParameters['expireAt'] = DateFormat('yyyy-MM-dd').format(expireAt);
     }
     if (active != null) {
-      queryParameters['active'] = active;
+      queryParameters['active'] = active.toString();
     }
 
     final uri =

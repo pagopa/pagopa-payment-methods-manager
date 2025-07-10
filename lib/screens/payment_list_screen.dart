@@ -171,7 +171,6 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: Consumer<ApiProvider>(
                   builder: (context, provider, child) {
-                    print('consumo evento');
                     if (provider.isLoading && provider.paymentMethods.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }

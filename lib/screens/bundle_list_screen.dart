@@ -155,7 +155,7 @@ class _BundleListScreenState extends State<BundleListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Gestione Pacchetti')),
+      appBar: AppBar(title: const Text('Pacchetti Commissionali')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

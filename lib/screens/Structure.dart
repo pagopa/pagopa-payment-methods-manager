@@ -14,18 +14,23 @@ class _StructureState extends State<Structure> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: getTab(),
-      bottomNavigationBar: BottomNavigationBar(
-        items: [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.inventory_2_outlined),
-              label: "Pacchetti Commissionali"),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.payment), label: "Metodi di Pagamento"),
-        ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+    // DefaultTabController è il modo più semplice per gestire le schede. [1]
+    return const DefaultTabController(
+      length: 2, // Il numero di schede/sezioni di contenuto da visualizzare. [8]
+      child: Scaffold(
+        appBar: TabBar(
+          tabs: [
+            Tab(icon: Icon(Icons.inventory_2_outlined), text: "Pacchetti Commissionali"),
+            Tab(icon: Icon(Icons.payment), text: "Metodi di Pagamento"),
+          ],
+        ),
+        // TabBarView viene utilizzato per visualizzare il contenuto corrispondente a ciascuna scheda. [8, 9]
+        body: TabBarView(
+          children: [
+            BundleListScreen(),
+            PaymentListScreen(),
+          ],
+        ),
       ),
     );
   }

@@ -147,7 +147,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Metodo di pagamento')),
+      appBar: AppBar(title: Text('Metodi di pagamento')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

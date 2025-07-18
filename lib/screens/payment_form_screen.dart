@@ -17,7 +17,10 @@ const _groupOptions = [
   'RBPS',
   'SATY',
   'APPL',
-  'RICO'
+  'RICO',
+  'RBPB',
+  'RBPP',
+  'RBPR'
 ];
 const _statusOptions = ['ENABLED', 'DISABLED', 'MAINTENANCE'];
 const _methodManagementOptions = [

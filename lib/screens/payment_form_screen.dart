@@ -23,6 +23,7 @@ const _groupOptions = [
   'RBPR'
 ];
 const _statusOptions = ['ENABLED', 'DISABLED', 'MAINTENANCE'];
+const _typeOptions = ['CARTE', 'CONTO', 'APP'];
 const _methodManagementOptions = [
   'ONBOARDABLE',
   'ONBOARDABLE_ONLY',
@@ -63,6 +64,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   late Map<String, String> _brandAssetsMap;
   late List<String> _targetList;
   late Set<String> _selectedTouchpoints;
+  late Set<String> _selectedTypes;
   late Set<String> _selectedDevices;
   String? _selectedGroup;
   String? _selectedStatus;
@@ -94,6 +96,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
 
     _selectedGroup = pm?.group;
     _selectedStatus = pm?.status;
+    _selectedTypes = Set.from(pm?.paymentMethodTypes ?? {});
     _selectedMethodManagement = pm?.methodManagement;
     _selectedDate = pm?.validityDateFrom;
   }
@@ -153,6 +156,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
       userDevice: _selectedDevices.toList(),
       group: _selectedGroup,
       status: _selectedStatus,
+      userDevice: _selectedTypes.toList(),
       methodManagement: _selectedMethodManagement,
       validityDateFrom: _selectedDate,
     );
@@ -283,6 +287,10 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
                 const SizedBox(height: 16),
                 _buildDropdown(_statusOptions, 'Stato', _selectedStatus,
                     (val) => setState(() => _selectedStatus = val),
+                    isRequired: true),
+                const SizedBox(height: 16),
+                _buildChoiceChipGroup('Payment method types', _typeOptions,
+                    _selectedTypes,
                     isRequired: true),
               ],
             ),

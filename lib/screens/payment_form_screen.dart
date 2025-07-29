@@ -33,7 +33,7 @@ const _methodManagementOptions = [
   'REDIRECT'
 ];
 const _touchpointOptions = ['IO', 'CHECKOUT', 'CHECKOUT_CART'];
-const _deviceOptions = ['IOS', 'ANDROID', 'WEB'];
+const _deviceOptions = ['IOS', 'ANDROID', 'WEB', 'SAFARI'];
 
 class PaymentFormScreen extends StatefulWidget {
   final PaymentMethod? paymentMethod;

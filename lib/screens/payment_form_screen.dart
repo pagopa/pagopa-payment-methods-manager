@@ -20,7 +20,9 @@ const _groupOptions = [
   'RICO',
   'RBPB',
   'RBPP',
-  'RBPR'
+  'RBPR',
+  'GOOG',
+  'KLRN'
 ];
 const _statusOptions = ['ENABLED', 'DISABLED', 'MAINTENANCE'];
 const _typeOptions = ['CARTE', 'CONTO', 'APP'];

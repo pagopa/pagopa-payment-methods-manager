@@ -156,7 +156,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
       userDevice: _selectedDevices.toList(),
       group: _selectedGroup,
       status: _selectedStatus,
-      userDevice: _selectedTypes.toList(),
+      paymentMethodTypes: _selectedTypes.toList(),
       methodManagement: _selectedMethodManagement,
       validityDateFrom: _selectedDate,
     );

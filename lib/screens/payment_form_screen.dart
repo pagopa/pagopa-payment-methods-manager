@@ -17,9 +17,15 @@ const _groupOptions = [
   'RBPS',
   'SATY',
   'APPL',
-  'RICO'
+  'RICO',
+  'RBPB',
+  'RBPP',
+  'RBPR',
+  'GOOG',
+  'KLRN'
 ];
 const _statusOptions = ['ENABLED', 'DISABLED', 'MAINTENANCE'];
+const _typeOptions = ['CARTE', 'CONTO', 'APP'];
 const _methodManagementOptions = [
   'ONBOARDABLE',
   'ONBOARDABLE_ONLY',
@@ -27,7 +33,7 @@ const _methodManagementOptions = [
   'REDIRECT'
 ];
 const _touchpointOptions = ['IO', 'CHECKOUT', 'CHECKOUT_CART'];
-const _deviceOptions = ['IOS', 'ANDROID', 'WEB'];
+const _deviceOptions = ['IOS', 'ANDROID', 'WEB', 'SAFARI'];
 
 class PaymentFormScreen extends StatefulWidget {
   final PaymentMethod? paymentMethod;
@@ -60,6 +66,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   late Map<String, String> _brandAssetsMap;
   late List<String> _targetList;
   late Set<String> _selectedTouchpoints;
+  late Set<String> _selectedTypes;
   late Set<String> _selectedDevices;
   String? _selectedGroup;
   String? _selectedStatus;
@@ -91,6 +98,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
 
     _selectedGroup = pm?.group;
     _selectedStatus = pm?.status;
+    _selectedTypes = Set.from(pm?.paymentMethodTypes ?? {});
     _selectedMethodManagement = pm?.methodManagement;
     _selectedDate = pm?.validityDateFrom;
   }
@@ -150,6 +158,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
       userDevice: _selectedDevices.toList(),
       group: _selectedGroup,
       status: _selectedStatus,
+      paymentMethodTypes: _selectedTypes.toList(),
       methodManagement: _selectedMethodManagement,
       validityDateFrom: _selectedDate,
     );
@@ -280,6 +289,10 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
                 const SizedBox(height: 16),
                 _buildDropdown(_statusOptions, 'Stato', _selectedStatus,
                     (val) => setState(() => _selectedStatus = val),
+                    isRequired: true),
+                const SizedBox(height: 16),
+                _buildChoiceChipGroup('Payment method types', _typeOptions,
+                    _selectedTypes,
                     isRequired: true),
               ],
             ),

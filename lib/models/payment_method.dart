@@ -25,6 +25,7 @@ class PaymentMethod {
   Map<String, String>? name;
   Map<String, String>? description;
   String? status;
+  List<String>? paymentMethodTypes;
   List<String>? target;
   Map<String, String>? metadata;
   String? paymentMethodId;
@@ -42,6 +43,7 @@ class PaymentMethod {
     this.name,
     this.description,
     this.status,
+    this.paymentMethodTypes,
     this.target,
     this.metadata,
     this.paymentMethodId,

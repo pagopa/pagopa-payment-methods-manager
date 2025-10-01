@@ -75,6 +75,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
           Expanded(flex: 2, child: Text('NOME', style: headerStyle)),
           Expanded(flex: 1, child: Text('GRUPPO', style: headerStyle)),
           Expanded(flex: 1, child: Text('STATO', style: headerStyle)),
+          Expanded(flex: 1, child: Text('TIPO', style: headerStyle)),
           Expanded(
               flex: 1,
               child: Align(

@@ -25,6 +25,7 @@ class PaymentMethod {
   Map<String, String>? name;
   Map<String, String>? description;
   String? status;
+  List<String>? paymentMethodTypes;
   List<String>? target;
   Map<String, String>? metadata;
   String? paymentMethodId;
@@ -42,6 +43,7 @@ class PaymentMethod {
     this.name,
     this.description,
     this.status,
+    this.paymentMethodTypes,
     this.target,
     this.metadata,
     this.paymentMethodId,
@@ -66,6 +68,9 @@ class PaymentMethod {
           ? Map<String, String>.from(json['description'])
           : null,
       status: json['status'],
+      paymentMethodTypes: json['payment_method_types'] != null
+          ? List<String>.from(json['payment_method_types'])
+          : null,
       target: json['target'] != null ? List<String>.from(json['target']) : null,
       metadata: json['metadata'] != null
           ? Map<String, String>.from(json['metadata'])
@@ -98,6 +103,7 @@ class PaymentMethod {
     if (name != null) data['name'] = name;
     if (description != null) data['description'] = description;
     if (status != null) data['status'] = status;
+    if (paymentMethodTypes != null) data['payment_method_types'] = paymentMethodTypes;
     if (target != null) data['target'] = target;
     if (metadata != null) data['metadata'] = metadata;
     if (paymentMethodId != null) data['payment_method_id'] = paymentMethodId;

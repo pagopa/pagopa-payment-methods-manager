@@ -5,7 +5,7 @@ const Map<String, String> _availableLanguages = {
   'EN': 'Inglese',
   'DE': 'Tedesco',
   'FR': 'Francese',
-  'ES': 'Spagnolo',
+  'SL': 'Sloveno',
 };
 
 class DynamicMultilangField extends StatefulWidget {

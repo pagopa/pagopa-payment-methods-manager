@@ -22,7 +22,8 @@ const _groupOptions = [
   'RBPP',
   'RBPR',
   'GOOG',
-  'KLRN'
+  'KLRN',
+  'RFPB'
 ];
 const _statusOptions = ['ENABLED', 'DISABLED', 'MAINTENANCE'];
 const _typeOptions = ['CARTE', 'CONTO', 'APP'];

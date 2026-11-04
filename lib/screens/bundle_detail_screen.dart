@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:payment_methods_manager/providers/api_provider.dart';
 import 'package:provider/provider.dart';
+import '../models/catalog_filters.dart';
 
 class BundleDetailScreen extends StatefulWidget {
   final String bundleId;
-  const BundleDetailScreen({super.key, required this.bundleId});
+  final String? ci;
+  const BundleDetailScreen({super.key, required this.bundleId, this.ci});
 
   @override
   State<BundleDetailScreen> createState() => _BundleDetailScreenState();
@@ -15,9 +17,12 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ApiProvider>(context, listen: false)
-          .fetchBundleDetails(widget.bundleId);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final provider = Provider.of<ApiProvider>(context, listen: false);
+      await provider.fetchBundleDetails(widget.bundleId);
+      if (mounted && widget.ci != null && widget.ci!.isNotEmpty) {
+        provider.fetchCiAttributes(widget.ci!, widget.bundleId);
+      }
     });
   }
 
@@ -33,12 +38,11 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
       ),
       body: Consumer<ApiProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoading || provider.selectedBundle == null) {
-            return const Center(child: CircularProgressIndicator());
+          if (provider.detailError != null) {
+            return Center(child: Text('Errore: ${provider.detailError}'));
           }
-
-          if (provider.errorMessage != null) {
-            return Center(child: Text('Errore: ${provider.errorMessage}'));
+          if (provider.detailLoading || provider.selectedBundle == null) {
+            return const Center(child: CircularProgressIndicator());
           }
 
           final bundle = provider.selectedBundle!;
@@ -52,31 +56,63 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
                 _buildDetailCard([
                   _buildDetailRow('Nome Pacchetto', bundle.name),
                   _buildDetailRow('ID Bundle', bundle.idBundle),
-                  _buildDetailRow('Descrizione', bundle.description, isMultiline: true),
+                  _buildDetailRow('Descrizione', bundle.description,
+                      isMultiline: true),
                   _buildDetailRow('PSP', bundle.pspBusinessName),
                   _buildDetailRow('ID PSP', bundle.idPsp),
                 ]),
                 const SizedBox(height: 24),
-
                 _buildSectionTitle('Regole e Configurazione'),
                 _buildDetailCard([
                   _buildDetailRow('Tipo', bundle.type),
                   _buildDetailRow('Touchpoint', bundle.touchpoint),
-                  _buildAmountRange('Range Importo', bundle.minPaymentAmount, bundle.maxPaymentAmount),
-                  _buildDateRange('Periodo di Validità', bundle.validityDateFrom, bundle.validityDateTo),
+                  _buildDetailRow('Tipo pagamento', bundle.paymentType),
+                  _buildDetailRow(
+                      'Commissione configurata', money(bundle.paymentAmount)),
+                  _buildAmountRange('Range Importo', bundle.minPaymentAmount,
+                      bundle.maxPaymentAmount),
+                  _buildDateRange('Periodo di Validità',
+                      bundle.validityDateFrom, bundle.validityDateTo),
                   _buildDetailRow('Canale', bundle.idChannel),
                   _buildDetailRow('Broker PSP', bundle.idBrokerPsp),
                 ]),
                 const SizedBox(height: 24),
-
                 _buildSectionTitle('Attributi Aggiuntivi'),
                 _buildDetailCard([
                   _buildBooleanRow('Bollo Digitale', bundle.digitalStamp),
-                  _buildBooleanRow('Restrizione Bollo Digitale', bundle.digitalStampRestriction),
+                  _buildBooleanRow('Restrizione Bollo Digitale',
+                      bundle.digitalStampRestriction),
                   _buildBooleanRow('Utilizzabile nel Carrello', bundle.cart),
                   _buildBooleanRow('Pagamento On-Us', bundle.onUs),
-                  _buildStringList('Lista Tipi Trasferimento', bundle.transferCategoryList),
+                  _buildStringList(
+                      'Lista Tipi Trasferimento', bundle.transferCategoryList),
                 ]),
+                if (widget.ci != null && widget.ci!.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Condizioni ente ${widget.ci}'),
+                  if (provider.selectedCiLoading)
+                    const LinearProgressIndicator()
+                  else if (provider.selectedCiError != null)
+                    Text(
+                        'Condizioni non disponibili: ${provider.selectedCiError}')
+                  else if (provider.selectedCiAttributes.isEmpty)
+                    const Text(
+                        'Nessun attributo restituito. Non implica non applicabilita del pacchetto.')
+                  else
+                    ...provider.selectedCiAttributes
+                        .map((attribute) => _buildDetailCard([
+                              _buildDetailRow('Tassonomia',
+                                  attribute['transferCategory'] as String?),
+                              _buildDetailRow(
+                                  'Relazione',
+                                  attribute['transferCategoryRelation']
+                                      as String?),
+                              _buildDetailRow('Contributo massimo',
+                                  money(attribute['maxPaymentAmount'] as int?)),
+                              _buildDetailRow('Fine validita',
+                                  attribute['validityDateTo'] as String?),
+                            ])),
+                ],
               ],
             ),
           );
@@ -91,8 +127,8 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-          color: Theme.of(context).primaryColor,
-        ),
+              color: Theme.of(context).primaryColor,
+            ),
       ),
     );
   }
@@ -109,7 +145,8 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
     );
   }
 
-  Widget _buildDetailRow(String label, String? value, {bool isMultiline = false}) {
+  Widget _buildDetailRow(String label, String? value,
+      {bool isMultiline = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: Row(
@@ -119,7 +156,8 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.black54),
             ),
           ),
           const SizedBox(width: 16),
@@ -164,7 +202,8 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.black54),
             ),
           ),
           const SizedBox(width: 16),
@@ -195,7 +234,8 @@ class _BundleDetailScreenState extends State<BundleDetailScreen> {
   }
 
   Widget _buildAmountRange(String label, int? minAmount, int? maxAmount) {
-    final value = '${_formatCurrency(minAmount)} - ${_formatCurrency(maxAmount)}';
+    final value =
+        '${_formatCurrency(minAmount)} - ${_formatCurrency(maxAmount)}';
     return _buildDetailRow(label, value);
   }
 

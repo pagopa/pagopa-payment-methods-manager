@@ -169,6 +169,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('filter inputs persist when collapsed and whitespace fees apply',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final provider = ApiProvider(apiService: WidgetApi());
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(wrap(const BundleListScreen(), provider));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Filtri di ricerca'));
+    await tester.pumpAndSettle();
+
+    final minFee = find.widgetWithText(TextFormField, 'Commissione minima EUR');
+    final maxFee =
+        find.widgetWithText(TextFormField, 'Commissione massima EUR');
+    await tester.enterText(minFee, '   ');
+    await tester.enterText(maxFee, '1');
+    await tester.tap(find.text('Filtri di ricerca'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Filtri di ricerca'));
+    await tester.pumpAndSettle();
+
+    final minInput =
+        find.descendant(of: minFee, matching: find.byType(EditableText));
+    final maxInput =
+        find.descendant(of: maxFee, matching: find.byType(EditableText));
+    expect(tester.widget<EditableText>(minInput).controller.text, '   ');
+    expect(tester.widget<EditableText>(maxInput).controller.text, '1');
+    await tester.ensureVisible(find.text('Applica'));
+    await tester.tap(find.text('Applica'));
+    await tester.pumpAndSettle();
+    expect(provider.bundleFilters['minFee'], '');
+    expect(provider.bundleFilters['maxFee'], '1');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('detail failure shows error rather than infinite spinner',
       (tester) async {
     final provider = ApiProvider(apiService: WidgetApi());

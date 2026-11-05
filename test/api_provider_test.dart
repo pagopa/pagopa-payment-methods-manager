@@ -24,6 +24,7 @@ class StubApi extends ApiService {
   Future<BundlesResponse> Function(int, String?) loader;
   final List<List<String>?> requestedTypes = [];
   final List<String> paths = [];
+  final List<String> requestedDetails = [];
   Completer<List<PaymentMethod>>? pendingMethods;
   StubApi(this.loader);
 
@@ -46,8 +47,10 @@ class StubApi extends ApiService {
       pendingMethods == null ? [] : pendingMethods!.future;
 
   @override
-  Future<PspBundleDetails> getBundleDetails(String bundleId) async =>
-      PspBundleDetails(idBundle: bundleId);
+  Future<PspBundleDetails> getBundleDetails(String bundleId) async {
+    requestedDetails.add(bundleId);
+    return PspBundleDetails(idBundle: bundleId);
+  }
 
   @override
   Future<Map<String, dynamic>> getMarketplaceResource(List<String> segments,
@@ -145,6 +148,40 @@ void main() {
     provider.updateConfig(jwt: 'new-token', host: 'https://other.test');
     pending.complete(page(0, 1, []));
     await expectation;
+    provider.dispose();
+  });
+
+  test('environment change reloads the open bundle and CI details', () async {
+    final api = StubApi((number, _) async => page(number, 0, []));
+    final provider = ApiProvider(apiService: api);
+    await provider.fetchBundleDetails('bundle');
+    await provider.fetchCiAttributes('CI', 'bundle');
+
+    provider.updateConfig(jwt: 'new-token', host: 'https://other.test');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(api.requestedDetails, ['bundle', 'bundle']);
+    expect(api.paths.where((path) => path.endsWith('/attributes')), [
+      'cis/CI/bundles/bundle/attributes',
+      'cis/CI/bundles/bundle/attributes'
+    ]);
+    expect(provider.selectedBundle?.idBundle, 'bundle');
+    expect(provider.detailLoading, isFalse);
+    expect(provider.selectedCiLoading, isFalse);
+    provider.dispose();
+  });
+
+  test('bundle API name filter is trimmed before the request', () async {
+    final requestedNames = <String?>[];
+    final api = StubApi((number, name) async {
+      requestedNames.add(name);
+      return page(number, 1, []);
+    });
+    final provider = ApiProvider(apiService: api);
+    provider.applyBundleFilters({'name': '  Bundle name  '});
+    await Future<void>.delayed(Duration.zero);
+
+    expect(requestedNames, ['Bundle name']);
     provider.dispose();
   });
 

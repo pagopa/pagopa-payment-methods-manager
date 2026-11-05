@@ -20,6 +20,7 @@ class ApiProvider with ChangeNotifier {
   int _bundleGeneration = 0;
   int _methodGeneration = 0;
   int _detailGeneration = 0;
+  String? _selectedBundleId;
   bool bundlesComplete = false;
   int bundlePagesLoaded = 0;
   int bundleTotalPages = 0;
@@ -31,6 +32,7 @@ class ApiProvider with ChangeNotifier {
   bool _disposed = false;
   int _ciGeneration = 0;
   int _environmentGeneration = 0;
+  String? _selectedCi;
   CatalogFilters methodFilters = CatalogFilters();
   List<PaymentMethod> get filteredPaymentMethods =>
       _paymentMethods.where(methodFilters.matchesMethod).toList();
@@ -198,6 +200,8 @@ class ApiProvider with ChangeNotifier {
   void updateConfig({required String jwt, required String host}) {
     if (_jwt == jwt && _host == host) return;
 
+    final bundleId = _selectedBundleId;
+    final ci = _selectedCi;
     _jwt = jwt;
     _host = host;
     _environmentGeneration++;
@@ -211,11 +215,17 @@ class ApiProvider with ChangeNotifier {
     _ciGeneration++;
     _paymentMethods = [];
     _selectedBundle = null;
+    detailLoading = false;
+    selectedCiLoading = false;
     selectedCiAttributes = [];
     selectedCiError = null;
     detailError = null;
     fetchMoreBundles(isRefresh: true);
     fetchPaymentMethods();
+    if (bundleId != null) {
+      fetchBundleDetails(bundleId);
+      if (ci != null && ci.isNotEmpty) fetchCiAttributes(ci, bundleId);
+    }
   }
 
   Future<void> fetchPaymentMethods() async {
@@ -275,6 +285,8 @@ class ApiProvider with ChangeNotifier {
 
   Future<void> fetchBundleDetails(String bundleId) async {
     final generation = ++_detailGeneration;
+    _selectedBundleId = bundleId;
+    _selectedCi = null;
     detailLoading = true;
     _selectedBundle = null;
     detailError = null;
@@ -382,10 +394,13 @@ class ApiProvider with ChangeNotifier {
 
   void applyBundleFilters(Map<String, String> values) {
     bundleFilters = CatalogFilters(values);
-    _nameFilter = values['name'];
-    _typesFilter = (values['type'] ?? '').isEmpty ? null : [values['type']!];
-    _pspFilter = values['psp'];
-    _statusFilter = switch (values['status']) {
+    final name = bundleFilters['name'];
+    _nameFilter = name.isEmpty ? null : name;
+    final type = bundleFilters['type'];
+    _typesFilter = type.isEmpty ? null : [type];
+    final psp = bundleFilters['psp'];
+    _pspFilter = psp.isEmpty ? null : psp;
+    _statusFilter = switch (bundleFilters['status']) {
       'active' => BundleStatusFilter.active,
       'future' => BundleStatusFilter.future,
       'expired' => BundleStatusFilter.expired,
@@ -395,6 +410,7 @@ class ApiProvider with ChangeNotifier {
   }
 
   Future<void> fetchCiAttributes(String ci, String bundleId) async {
+    _selectedCi = ci;
     selectedCiLoading = true;
     selectedCiError = null;
     selectedCiAttributes = [];

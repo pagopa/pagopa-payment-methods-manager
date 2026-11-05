@@ -25,7 +25,21 @@ class CatalogFilterPanel extends StatefulWidget {
 class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
   final _form = GlobalKey<FormState>();
   final Map<String, String> _values = {};
+  final Map<String, TextEditingController> _controllers = {};
   int _revision = 0;
+
+  TextEditingController _controllerFor(String key) => _controllers.putIfAbsent(
+        key,
+        () => TextEditingController(text: _values[key] ?? ''),
+      );
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +67,7 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                                 ? TextFormField(
                                     key:
                                         ValueKey('${field.keyName}-$_revision'),
+                                    controller: _controllerFor(field.keyName),
                                     decoration:
                                         InputDecoration(labelText: field.label),
                                     onChanged: (value) =>
@@ -99,6 +114,9 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                           TextButton(
                             onPressed: () {
                               setState(() {
+                                for (final controller in _controllers.values) {
+                                  controller.clear();
+                                }
                                 _values.clear();
                                 _revision++;
                               });
@@ -109,8 +127,10 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                           FilledButton(
                             onPressed: () {
                               if (_form.currentState!.validate()) {
-                                final min = _values['minFee'] ?? '';
-                                final max = _values['maxFee'] ?? '';
+                                final values = _values.map((key, value) =>
+                                    MapEntry(key, value.trim()));
+                                final min = values['minFee'] ?? '';
+                                final max = values['maxFee'] ?? '';
                                 if (min.isNotEmpty &&
                                     max.isNotEmpty &&
                                     parseCents(min) > parseCents(max)) {
@@ -121,7 +141,7 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                                   );
                                   return;
                                 }
-                                widget.onApply(Map.of(_values));
+                                widget.onApply(values);
                               }
                             },
                             child: const Text('Applica'),

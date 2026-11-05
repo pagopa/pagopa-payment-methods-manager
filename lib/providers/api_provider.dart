@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 
 import '../api/api_service.dart';
-import '../models/payment_method.dart';
-import '../models/catalog_filters.dart';
 import '../export/catalog_csv.dart';
+import '../models/catalog_filters.dart';
+import '../models/payment_method.dart';
 
 enum BundleStatusFilter { all, active, future, expired }
 
@@ -34,6 +34,7 @@ class ApiProvider with ChangeNotifier {
   int _environmentGeneration = 0;
   String? _selectedCi;
   CatalogFilters methodFilters = CatalogFilters();
+
   List<PaymentMethod> get filteredPaymentMethods =>
       _paymentMethods.where(methodFilters.matchesMethod).toList();
   final Map<String, PspBundleDetails> _detailCache = {};
@@ -73,6 +74,7 @@ class ApiProvider with ChangeNotifier {
   PspBundleDetails? get selectedBundle => _selectedBundle;
   int _currentPage = 0;
   bool _hasMore = true;
+
   bool get hasMoreBundles => _hasMore;
 
   String? _nameFilter;
@@ -235,10 +237,8 @@ class ApiProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_jwt.isNotEmpty) {
-        final methods = await _apiService.getPaymentMethods();
-        if (generation == _methodGeneration) _paymentMethods = methods;
-      }
+      final methods = await _apiService.getPaymentMethods();
+      if (generation == _methodGeneration) _paymentMethods = methods;
     } catch (e) {
       if (generation == _methodGeneration) methodsError = e.toString();
     } finally {

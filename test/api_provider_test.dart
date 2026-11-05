@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:payment_methods_manager/api/api_service.dart';
 import 'package:payment_methods_manager/models/bundles_response.dart';
+import 'package:payment_methods_manager/models/catalog_filters.dart';
 import 'package:payment_methods_manager/models/page_info.dart';
 import 'package:payment_methods_manager/models/payment_method.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
@@ -25,6 +26,7 @@ class StubApi extends ApiService {
   final List<List<String>?> requestedTypes = [];
   final List<String> paths = [];
   final List<String> requestedDetails = [];
+  final List<PspBundleDetails> detailResponses = [];
   Completer<List<PaymentMethod>>? pendingMethods;
   StubApi(this.loader);
 
@@ -49,6 +51,7 @@ class StubApi extends ApiService {
   @override
   Future<PspBundleDetails> getBundleDetails(String bundleId) async {
     requestedDetails.add(bundleId);
+    if (detailResponses.isNotEmpty) return detailResponses.removeAt(0);
     return PspBundleDetails(idBundle: bundleId);
   }
 
@@ -73,6 +76,18 @@ class StubApi extends ApiService {
       ],
       'pageInfo': {'totalPages': 1}
     };
+  }
+}
+
+class CountingCatalogFilters extends CatalogFilters {
+  int evaluations = 0;
+
+  CountingCatalogFilters() : super({'touchpoint': 'CHECKOUT'});
+
+  @override
+  bool matchesBundle(PspBundleDetails bundle, DateTime now) {
+    evaluations++;
+    return super.matchesBundle(bundle, now);
   }
 }
 
@@ -182,6 +197,49 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(requestedNames, ['Bundle name']);
+    provider.dispose();
+  });
+
+  test('local filter evaluates each newly loaded bundle once', () async {
+    const totalPages = 8;
+    const pageSize = 20;
+    final api = StubApi((number, _) async => page(
+          number,
+          totalPages,
+          List.generate(
+            pageSize,
+            (index) => PspBundleDetails(
+              idBundle: '$number-$index',
+              touchpoint: 'IO',
+            ),
+          ),
+        ));
+    final provider = ApiProvider(apiService: api);
+    final filters = CountingCatalogFilters();
+    provider.bundleFilters = filters;
+
+    await provider.fetchMoreBundles(isRefresh: true);
+
+    expect(filters.evaluations, totalPages * pageSize);
+    expect(provider.filteredBundles, isEmpty);
+    expect(provider.bundlePagesLoaded, totalPages);
+    provider.dispose();
+  });
+
+  test('reopening a bundle fetches its latest details', () async {
+    final api = StubApi((number, _) async => page(number, 0, []));
+    api.detailResponses.addAll([
+      PspBundleDetails(idBundle: 'bundle', name: 'Old name'),
+      PspBundleDetails(idBundle: 'bundle', name: 'Updated name'),
+    ]);
+    final provider = ApiProvider(apiService: api);
+
+    await provider.fetchBundleDetails('bundle');
+    expect(provider.selectedBundle?.name, 'Old name');
+    await provider.fetchBundleDetails('bundle');
+
+    expect(api.requestedDetails, ['bundle', 'bundle']);
+    expect(provider.selectedBundle?.name, 'Updated name');
     provider.dispose();
   });
 

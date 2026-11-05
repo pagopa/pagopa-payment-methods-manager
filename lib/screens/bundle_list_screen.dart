@@ -249,16 +249,16 @@ class _BundleListScreenState extends State<BundleListScreen>
   }
 
   Widget _buildStatusChip(PspBundleDetails bundle) {
-    final now = DateTime.now();
+    final today = DateUtilsForFilters.day(DateTime.now());
     String statusText = 'ATTIVO';
     Color color = Colors.green;
 
     if (bundle.validityDateFrom != null &&
-        now.isBefore(bundle.validityDateFrom!)) {
+        DateUtilsForFilters.day(bundle.validityDateFrom!).isAfter(today)) {
       statusText = 'FUTURO';
       color = Colors.blue;
     } else if (bundle.validityDateTo != null &&
-        now.isAfter(bundle.validityDateTo!)) {
+        DateUtilsForFilters.day(bundle.validityDateTo!).isBefore(today)) {
       statusText = 'SCADUTO';
       color = Colors.grey;
     }

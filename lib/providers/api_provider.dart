@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 
@@ -37,8 +39,6 @@ class ApiProvider with ChangeNotifier {
 
   List<PaymentMethod> get filteredPaymentMethods =>
       _paymentMethods.where(methodFilters.matchesMethod).toList();
-  final Map<String, PspBundleDetails> _detailCache = {};
-
   @override
   void notifyListeners() {
     if (!_disposed) super.notifyListeners();
@@ -68,7 +68,12 @@ class ApiProvider with ChangeNotifier {
 
   List<PaymentMethod> get paymentMethods => _paymentMethods;
 
-  List<PspBundleDetails> _bundles = [];
+  final List<PspBundleDetails> _bundles = [];
+  final Set<String> _bundleIds = {};
+  final List<PspBundleDetails> _filteredBundles = [];
+  late final List<PspBundleDetails> _filteredBundlesView =
+      UnmodifiableListView(_filteredBundles);
+  DateTime? _filteredBundlesDay;
   PspBundleDetails? _selectedBundle;
 
   PspBundleDetails? get selectedBundle => _selectedBundle;
@@ -91,21 +96,26 @@ class ApiProvider with ChangeNotifier {
   String? get pspFilter => _pspFilter;
 
   List<PspBundleDetails> get filteredBundles {
-    List<PspBundleDetails> result = List.from(_bundles);
-
-    if (_pspFilter != null && _pspFilter!.isNotEmpty) {
-      result = result.where((bundle) {
-        final pspCode = bundle.idPsp?.toLowerCase() ?? '';
-        final pspName = bundle.pspBusinessName?.toLowerCase() ?? pspCode;
-        var filter = _pspFilter!.trim().toLowerCase();
-        return pspName.contains(filter) || pspCode.contains(filter);
-      }).toList();
-    }
-    return result
-        .where((bundle) => _matchesBundle(
-            bundle, bundleFilters, ciAssociations, DateTime.now()))
-        .toList();
+    _ensureFilteredBundles(DateTime.now());
+    return _filteredBundlesView;
   }
+
+  void _ensureFilteredBundles(DateTime now) {
+    final today = DateUtilsForFilters.day(now);
+    if (_filteredBundlesDay == today) return;
+
+    _filteredBundles
+      ..clear()
+      ..addAll(_bundles.where((bundle) => _matchesCurrentFilters(bundle, now)));
+    _filteredBundlesDay = today;
+  }
+
+  bool _matchesCurrentFilters(PspBundleDetails bundle, DateTime now) =>
+      (_pspFilter == null ||
+          _pspFilter!.trim().isEmpty ||
+          containsText(bundle.idPsp, _pspFilter!) ||
+          containsText(bundle.pspBusinessName, _pspFilter!)) &&
+      _matchesBundle(bundle, bundleFilters, ciAssociations, now);
 
   // Lista ed export condividono la stessa selezione locale, inclusa l'eccezione
   // GLOBAL: l'assenza di un'adesione ente non ne implica la non applicabilita.
@@ -211,7 +221,6 @@ class ApiProvider with ChangeNotifier {
     _apiService.setAuthToken(_jwt);
     _apiService.setHost(_host);
 
-    _detailCache.clear();
     _methodGeneration++;
     _detailGeneration++;
     _ciGeneration++;
@@ -297,10 +306,8 @@ class ApiProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final bundle = _detailCache[bundleId] ??
-          await _apiService.getBundleDetails(bundleId);
+      final bundle = await _apiService.getBundleDetails(bundleId);
       if (generation == _detailGeneration) {
-        _detailCache[bundleId] = bundle;
         _selectedBundle = bundle;
       }
     } catch (e) {
@@ -318,7 +325,10 @@ class ApiProvider with ChangeNotifier {
     final generation = ++_bundleGeneration;
     if (isRefresh) {
       _currentPage = 0;
-      _bundles = [];
+      _bundles.clear();
+      _bundleIds.clear();
+      _filteredBundles.clear();
+      _filteredBundlesDay = DateUtilsForFilters.day(DateTime.now());
       _hasMore = true;
       _errorMessage = null;
       bundlesComplete = false;
@@ -363,9 +373,18 @@ class ApiProvider with ChangeNotifier {
             types: _typesFilter ?? ['GLOBAL', 'PUBLIC', 'PRIVATE'],
             active: active);
         if (generation != _bundleGeneration) return;
-        final ids = _bundles.map((bundle) => bundle.idBundle).toSet();
-        _bundles.addAll(response.bundles.where(
-            (bundle) => bundle.idBundle == null || ids.add(bundle.idBundle)));
+        final now = DateTime.now();
+        _ensureFilteredBundles(now);
+        for (final bundle in response.bundles) {
+          final id = bundle.idBundle;
+          if (id != null && !_bundleIds.add(id)) {
+            continue;
+          }
+          _bundles.add(bundle);
+          if (_matchesCurrentFilters(bundle, now)) {
+            _filteredBundles.add(bundle);
+          }
+        }
         _currentPage++;
         bundlePagesLoaded = _currentPage;
         bundleTotalPages = response.pageInfo.totalPages;
@@ -448,6 +467,7 @@ class ApiProvider with ChangeNotifier {
     _typesFilter = types;
     _statusFilter = status ?? BundleStatusFilter.all;
     _pspFilter = psp;
+    _filteredBundlesDay = null;
 
     if (apiFiltersChanged) {
       fetchMoreBundles(isRefresh: true);

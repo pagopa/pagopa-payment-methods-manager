@@ -85,6 +85,32 @@ class PagedWidgetApi extends WidgetApi {
   }
 }
 
+class ExpiryTodayWidgetApi extends WidgetApi {
+  @override
+  Future<BundlesResponse> getBundles({
+    int page = 0,
+    int limit = 20,
+    String? name,
+    List<String>? types,
+    DateTime? validFrom,
+    DateTime? expireAt,
+    bool? active,
+  }) async {
+    final now = DateTime.now();
+    return BundlesResponse(
+      pageInfo: PageInfo(page: 0, limit: limit, itemsFound: 1, totalPages: 1),
+      bundles: [
+        PspBundleDetails(
+          idBundle: 'expires-today',
+          name: 'Expires today',
+          type: 'GLOBAL',
+          validityDateTo: DateTime(now.year, now.month, now.day),
+        ),
+      ],
+    );
+  }
+}
+
 Widget wrap(Widget child, ApiProvider provider) => ChangeNotifierProvider.value(
       value: provider,
       child: MaterialApp(home: child),
@@ -166,6 +192,18 @@ void main() {
     expect(provider.bundleFilters['id'], 'id');
     expect(tester.widget<ExpansionTile>(find.byType(ExpansionTile)).subtitle,
         isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('bundle expiring today is active through the whole day',
+      (tester) async {
+    final provider = ApiProvider(apiService: ExpiryTodayWidgetApi());
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(wrap(const BundleListScreen(), provider));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ATTIVO'), findsOneWidget);
+    expect(find.text('SCADUTO'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

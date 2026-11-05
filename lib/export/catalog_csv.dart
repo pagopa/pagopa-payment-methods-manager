@@ -51,7 +51,13 @@ class CatalogCsv {
   ];
 
   static String bundles(Iterable<PspBundleDetails> records) =>
-      encode(_bundleColumns, records.map((record) => record.toJson()));
+      encode(_bundleColumns, records.map((record) => {
+            ...record.toJson(),
+            'validityDateFrom':
+                record.validityDateFrom?.toIso8601String().split('T').first,
+            'validityDateTo':
+                record.validityDateTo?.toIso8601String().split('T').first,
+          }));
 
   static String methods(Iterable<PaymentMethod> records) =>
       encode(_methodColumns, records.map((record) => record.toJson()));

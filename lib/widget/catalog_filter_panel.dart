@@ -26,17 +26,11 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
   final _form = GlobalKey<FormState>();
   final Map<String, String> _values = {};
   int _revision = 0;
-  Map<String, String> _applied = {};
 
   @override
   Widget build(BuildContext context) {
     return ExpansionTile(
       title: const Text('Filtri di ricerca'),
-      subtitle: _applied.isEmpty
-          ? null
-          : Text(_applied.entries
-              .map((entry) => '${entry.key}: ${entry.value}')
-              .join(' / ')),
       initiallyExpanded: false,
       children: [
         ConstrainedBox(
@@ -106,7 +100,6 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                             onPressed: () {
                               setState(() {
                                 _values.clear();
-                                _applied = {};
                                 _revision++;
                               });
                               widget.onApply({});
@@ -129,11 +122,6 @@ class _CatalogFilterPanelState extends State<CatalogFilterPanel> {
                                   return;
                                 }
                                 widget.onApply(Map.of(_values));
-                                setState(() {
-                                  _applied = Map.fromEntries(_values.entries
-                                      .where((entry) =>
-                                          entry.value.trim().isNotEmpty));
-                                });
                               }
                             },
                             child: const Text('Applica'),

@@ -66,7 +66,8 @@ class CatalogFilters {
     final expired = bundle.validityDateTo != null &&
         DateUtilsForFilters.day(bundle.validityDateTo!)
             .isBefore(DateUtilsForFilters.day(now));
-    return (this['touchpoint'].isEmpty ||
+    return (this['id'].isEmpty || bundle.idBundle == this['id']) &&
+        (this['touchpoint'].isEmpty ||
             bundle.touchpoint == this['touchpoint']) &&
         (this['paymentType'].isEmpty ||
             bundle.paymentType == this['paymentType']) &&

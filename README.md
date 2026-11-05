@@ -10,7 +10,7 @@ funzioni gestionali esistenti e aggiungono filtri combinabili, applicati con
 
 - Metodi: nome/ID, touchpoint, gestione (in particolare `REDIRECT`), stato, gruppo,
   categoria e device. IO, CHECKOUT e CHECKOUT_CART rimangono distinti.
-- Pacchetti: nome, tipo GLOBAL/PUBLIC/PRIVATE, stato, touchpoint, tipo pagamento,
+- Pacchetti: nome, ID esatto, tipo GLOBAL/PUBLIC/PRIVATE, stato, touchpoint, tipo pagamento,
   PSP per ID o nome, importo del pagamento, commissione, tassonomia, ente,
   canale/broker e flag tecnici.
 
@@ -21,10 +21,11 @@ pacchetti usa l'intervallo **(minimo, massimo]**, coerente con la query calculat
 minimo escluso, massimo incluso. La tassonomia in lista filtra il valore
 configurato esatto, non interpreta le regole specifiche dell'ente.
 
-La ricerca pacchetti percorre tutte le pagine necessarie ai filtri locali, con
-richieste sequenziali e possibilita' di interruzione. Avanzamento e risultati
-parziali sono espliciti; un errore non viene presentato come un elenco completo
-vuoto. "Tutti" richiede esplicitamente tutti e tre i tipi, evitando il default
+La lista pacchetti carica progressivamente i risultati con infinite scroll,
+senza mostrare numeri di pagina o riepiloghi dei filtri applicati. Se i filtri
+locali escludono un'intera pagina, la ricerca prosegue fino al prossimo risultato
+o alla fine dei dati. Un errore mantiene i risultati caricati e permette di
+riprovare. "Tutti" richiede esplicitamente tutti e tre i tipi, evitando il default
 GLOBAL del backend. Con un ente specificato vengono mostrati i pacchetti associati
 e i GLOBAL: questo non sostituisce la selezione del calculator. Il dettaglio
 mostra gli attributi ente disponibili, comprese le relazioni EQUAL/NOT_EQUAL.
@@ -32,6 +33,24 @@ mostra gli attributi ente disponibili, comprese le relazioni EQUAL/NOT_EQUAL.
 Le funzionalita' di consultazione utilizzano esclusivamente le API marketplace.
 Non sono presenti simulazioni o confronti delle commissioni tramite calculator.
 La configurazione di accesso marketplace per lo sviluppo locale resta invariata.
+
+### Export dei risultati filtrati
+
+Il pulsante **Esporta CSV** in ciascuna schermata scarica solo i record che
+rispettano i filtri applicati con **Applica**. Le modifiche ai campi non ancora
+applicate non influenzano il file. Senza filtri vengono esportati tutti i record.
+
+Per i pacchetti l'export legge tutte le pagine, comprese quelle non ancora caricate
+con l'infinite scroll, usando una fotografia dei filtri al click. Questa lettura
+non modifica la lista o la posizione dello scroll. Se cambia l'ambiente o una
+richiesta fallisce, l'export segnala l'errore e non scarica un file parziale.
+
+Il CSV usa BOM UTF-8, separatore `;` e terminatori CRLF per Excel. Le intestazioni
+corrispondono ai campi API; gli importi sono **centesimi interi**, le date sono nel
+formato API e liste/mappe sono serializzate come JSON nella cella, mantenendo
+touchpoint e traduzioni. I valori null sono vuoti, distinti da zero e false.
+Le celle potenzialmente interpretabili come formule vengono prefissate con un
+apostrofo. Il download avviene nel browser, senza servizi esterni o storage locale.
 
 ### Sviluppo
 

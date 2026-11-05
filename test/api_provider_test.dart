@@ -75,6 +75,124 @@ class StubApi extends ApiService {
 
 void main() {
   test(
+      'bundle export includes unloaded filtered records without changing scroll data',
+      () async {
+    final requested = <int>[];
+    final api = StubApi((number, _) async {
+      requested.add(number);
+      return page(number, 3, [
+        PspBundleDetails(idBundle: 'id-$number', touchpoint: 'IO'),
+        PspBundleDetails(idBundle: 'excluded-$number', touchpoint: 'CHECKOUT'),
+        PspBundleDetails(idBundle: 'duplicate', touchpoint: 'IO'),
+      ]);
+    });
+    final provider = ApiProvider(apiService: api);
+    provider.applyBundleFilters({'touchpoint': 'IO'});
+    await Future<void>.delayed(Duration.zero);
+    final loaded = provider.filteredBundles.length;
+    expect(provider.bundlesComplete, false);
+    final csv = await provider.exportBundlesCsv();
+    expect(requested, [0, 0, 1, 2]);
+    for (var index = 0; index < 3; index++) {
+      expect(csv, contains('"id-$index"'));
+      expect(csv, isNot(contains('"excluded-$index"')));
+    }
+    expect('"duplicate"'.allMatches(csv), hasLength(1));
+    expect(provider.filteredBundles, hasLength(loaded));
+    expect(provider.bundlePagesLoaded, 1);
+    provider.dispose();
+  });
+
+  test('export uses filter snapshot even when list filters change', () async {
+    final pending = Completer<BundlesResponse>();
+    var delay = false;
+    final api = StubApi(
+        (number, _) => delay ? pending.future : Future.value(page(0, 1, [])));
+    final provider = ApiProvider(apiService: api);
+    provider.applyBundleFilters({'touchpoint': 'IO'});
+    await Future<void>.delayed(Duration.zero);
+    delay = true;
+    final export = provider.exportBundlesCsv();
+    delay = false;
+    provider.applyBundleFilters({'touchpoint': 'CHECKOUT'});
+    pending.complete(page(0, 1, [
+      PspBundleDetails(idBundle: 'IO-result', touchpoint: 'IO'),
+      PspBundleDetails(idBundle: 'checkout-result', touchpoint: 'CHECKOUT'),
+    ]));
+    final csv = await export;
+    expect(csv, contains('"IO-result"'));
+    expect(csv, isNot(contains('"checkout-result"')));
+    provider.dispose();
+  });
+
+  test('export propagates a page error instead of returning partial CSV',
+      () async {
+    final api = StubApi((number, _) async {
+      if (number == 1) throw StateError('export failed');
+      return page(number, 2, [PspBundleDetails(idBundle: 'first')]);
+    });
+    final provider = ApiProvider(apiService: api);
+    await expectLater(provider.exportBundlesCsv(), throwsStateError);
+    provider.dispose();
+  });
+
+  test('environment change invalidates pending export', () async {
+    final pending = Completer<BundlesResponse>();
+    final api = StubApi((number, _) => pending.future);
+    final provider = ApiProvider(apiService: api);
+    final export = provider.exportBundlesCsv();
+    final expectation = expectLater(export, throwsStateError);
+    provider.updateConfig(jwt: 'new-token', host: 'https://other.test');
+    pending.complete(page(0, 1, []));
+    await expectation;
+    provider.dispose();
+  });
+
+  test('CI export keeps associated records plus GLOBAL across all pages',
+      () async {
+    final api = StubApi((number, _) async => page(number, 1, [
+          PspBundleDetails(idBundle: 'global', type: 'GLOBAL'),
+          PspBundleDetails(idBundle: 'public', type: 'PUBLIC'),
+          PspBundleDetails(idBundle: 'private', type: 'PRIVATE'),
+        ]));
+    final provider = ApiProvider(apiService: api);
+    provider.applyBundleFilters({'ci': 'CI'});
+    await Future<void>.delayed(Duration.zero);
+    final csv = await provider.exportBundlesCsv();
+    expect(csv, contains('"global"'));
+    expect(csv, contains('"public"'));
+    expect(csv, isNot(contains('"private"')));
+    provider.dispose();
+  });
+
+  test('method export and visible records use the same applied filters',
+      () async {
+    final api = StubApi((number, _) async => page(number, 0, []));
+    api.pendingMethods = Completer<List<PaymentMethod>>();
+    final provider = ApiProvider(apiService: api);
+    provider.updateConfig(jwt: 'test-token', host: 'https://example.test');
+    api.pendingMethods!.complete([
+      PaymentMethod(
+          paymentMethodId: 'included',
+          userTouchpoint: ['IO'],
+          methodManagement: 'REDIRECT'),
+      PaymentMethod(
+          paymentMethodId: 'excluded',
+          userTouchpoint: ['CHECKOUT'],
+          methodManagement: 'REDIRECT'),
+    ]);
+    await provider.fetchPaymentMethods();
+    provider.applyMethodFilters({'touchpoint': 'IO', 'management': 'REDIRECT'});
+    final csv = await provider.exportPaymentMethodsCsv();
+    expect(provider.filteredPaymentMethods.single.paymentMethodId, 'included');
+    expect(csv, contains('"included"'));
+    expect(csv, isNot(contains('"excluded"')));
+    provider.applyMethodFilters({});
+    expect(await provider.exportPaymentMethodsCsv(), contains('"excluded"'));
+    provider.dispose();
+  });
+
+  test(
       'local filters scan last page, deduplicate and explicitly request every type',
       () async {
     final api = StubApi((number, _) async => page(
@@ -104,10 +222,54 @@ void main() {
     });
     final provider = ApiProvider(apiService: api);
     await provider.fetchMoreBundles(isRefresh: true);
+    expect(provider.errorMessage, isNull);
+    expect(provider.hasMoreBundles, true);
+    await provider.fetchMoreBundles();
     expect(provider.bundlesComplete, false);
     expect(provider.filteredBundles, hasLength(1));
     expect(provider.errorMessage, contains('failed page'));
     expect(provider.isLoading, false);
+    provider.dispose();
+  });
+
+  test(
+      'infinite loading requests one matching batch at a time and retries failed pages',
+      () async {
+    final requested = <int>[];
+    var fail = true;
+    final api = StubApi((number, _) async {
+      requested.add(number);
+      if (number == 1 && fail) {
+        fail = false;
+        throw StateError('retry');
+      }
+      return page(number, 3, [PspBundleDetails(idBundle: 'id-$number')]);
+    });
+    final provider = ApiProvider(apiService: api);
+    await provider.fetchMoreBundles(isRefresh: true);
+    expect(requested, [0]);
+    expect(provider.bundlesComplete, false);
+    await provider.fetchMoreBundles();
+    expect(provider.errorMessage, isNotNull);
+    await provider.fetchMoreBundles();
+    expect(provider.errorMessage, isNull);
+    expect(provider.filteredBundles, hasLength(2));
+    await provider.fetchMoreBundles();
+    expect(provider.bundlesComplete, true);
+    await provider.fetchMoreBundles();
+    expect(requested, [0, 1, 1, 2]);
+    provider.dispose();
+  });
+
+  test('ID filter finds exact matches past empty filtered pages', () async {
+    final api = StubApi((number, _) async => page(number, 3, [
+          PspBundleDetails(idBundle: 'id-$number'),
+        ]));
+    final provider = ApiProvider(apiService: api);
+    provider.applyBundleFilters({'id': 'id-2'});
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.filteredBundles.single.idBundle, 'id-2');
+    expect(provider.bundlesComplete, true);
     provider.dispose();
   });
 
@@ -138,6 +300,7 @@ void main() {
     final api = StubApi((number, _) async => page(number, 0, []));
     api.pendingMethods = Completer<List<PaymentMethod>>();
     final provider = ApiProvider(apiService: api);
+    provider.updateConfig(jwt: 'test-token', host: 'https://example.test');
     final methods = provider.fetchPaymentMethods();
     await provider.fetchMoreBundles(isRefresh: true);
     expect(provider.methodsLoading, true);

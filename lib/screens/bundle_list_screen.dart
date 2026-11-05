@@ -5,6 +5,7 @@ import '../providers/api_provider.dart';
 import 'bundle_detail_screen.dart';
 import '../models/catalog_filters.dart';
 import '../widget/catalog_filter_panel.dart';
+import '../widget/csv_export_button.dart';
 
 class BundleListScreen extends StatefulWidget {
   const BundleListScreen({super.key});
@@ -21,12 +22,24 @@ class _BundleListScreenState extends State<BundleListScreen>
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_loadNearEnd);
     final provider = Provider.of<ApiProvider>(context, listen: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !provider.isLoading && !provider.bundlesComplete) {
+      if (mounted && !provider.isLoading && provider.bundlePagesLoaded == 0) {
         provider.fetchMoreBundles(isRefresh: true);
       }
     });
+  }
+
+  void _loadNearEnd() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final provider = context.read<ApiProvider>();
+    if (_scrollController.position.extentAfter < 300 &&
+        provider.hasMoreBundles &&
+        !provider.isLoading &&
+        provider.errorMessage == null) {
+      provider.fetchMoreBundles();
+    }
   }
 
   @override
@@ -54,15 +67,22 @@ class _BundleListScreenState extends State<BundleListScreen>
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Elenco Pacchetti',
-                  style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Elenco Pacchetti',
+                    style: Theme.of(context).textTheme.titleLarge),
+                CsvExportButton(
+                  filename: 'pacchetti.csv',
+                  createCsv: context.read<ApiProvider>().exportBundlesCsv,
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             CatalogFilterPanel(
               fields: const [
                 FilterField('name', 'Nome pacchetto'),
+                FilterField('id', 'ID pacchetto'),
                 FilterField('psp', 'Nome o ID PSP'),
                 FilterField('type', 'Tipo',
                     options: ['GLOBAL', 'PUBLIC', 'PRIVATE']),
@@ -94,28 +114,21 @@ class _BundleListScreenState extends State<BundleListScreen>
                 child: Consumer<ApiProvider>(
                   builder: (context, provider, child) {
                     final bundlesToDisplay = provider.filteredBundles;
+                    WidgetsBinding.instance
+                        .addPostFrameCallback((_) => _loadNearEnd());
 
                     final progress = Column(
                       children: [
-                        Text('${bundlesToDisplay.length} pacchetti'
-                            ' - ${provider.bundlesComplete ? "ricerca completa" : "risultati parziali"}'
-                            ' - pagine ${provider.bundlePagesLoaded}/${provider.bundleTotalPages}'),
-                        if (provider.bundleFilters['ci'].isNotEmpty)
-                          const Text(
-                              'Associazioni ente + GLOBAL. Le condizioni non certificano la fee applicabile.'),
-                        if (provider.isLoading) ...[
+                        if (provider.isLoading && bundlesToDisplay.isEmpty)
                           const LinearProgressIndicator(),
-                          TextButton(
-                              onPressed: provider.stopBundleSearch,
-                              child: const Text('Interrompi')),
-                        ],
                         if (provider.errorMessage != null)
                           Text('Ricerca incompleta: ${provider.errorMessage}'),
-                        if (!provider.isLoading && !provider.bundlesComplete)
+                        if (!provider.isLoading &&
+                            provider.errorMessage != null)
                           TextButton(
-                            onPressed: () =>
-                                provider.fetchMoreBundles(isRefresh: true),
-                            child: const Text('Riprova ricerca completa'),
+                            onPressed: () => provider.fetchMoreBundles(
+                                isRefresh: provider.bundlePagesLoaded == 0),
+                            child: const Text('Riprova'),
                           ),
                       ],
                     );
@@ -131,7 +144,7 @@ class _BundleListScreenState extends State<BundleListScreen>
                         progress,
                         Text(provider.bundlesComplete
                             ? 'Nessun pacchetto trovato con i filtri attuali.'
-                            : 'Nessun risultato nelle pagine caricate.'),
+                            : 'Ricerca interrotta.'),
                       ]);
                     }
 
@@ -144,6 +157,7 @@ class _BundleListScreenState extends State<BundleListScreen>
                             onRefresh: () =>
                                 provider.fetchMoreBundles(isRefresh: true),
                             child: ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               controller: _scrollController,
                               itemCount: bundlesToDisplay.length +
                                   (provider.isLoading &&

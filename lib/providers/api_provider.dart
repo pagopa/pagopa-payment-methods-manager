@@ -4,6 +4,7 @@ import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 import '../api/api_service.dart';
 import '../models/payment_method.dart';
 import '../models/catalog_filters.dart';
+import '../export/catalog_csv.dart';
 
 enum BundleStatusFilter { all, active, future, expired }
 
@@ -29,6 +30,10 @@ class ApiProvider with ChangeNotifier {
   bool selectedCiLoading = false;
   bool _disposed = false;
   int _ciGeneration = 0;
+  int _environmentGeneration = 0;
+  CatalogFilters methodFilters = CatalogFilters();
+  List<PaymentMethod> get filteredPaymentMethods =>
+      _paymentMethods.where(methodFilters.matchesMethod).toList();
   final Map<String, PspBundleDetails> _detailCache = {};
 
   @override
@@ -43,6 +48,7 @@ class ApiProvider with ChangeNotifier {
     _methodGeneration++;
     _detailGeneration++;
     _ciGeneration++;
+    _environmentGeneration++;
     super.dispose();
   }
 
@@ -65,6 +71,7 @@ class ApiProvider with ChangeNotifier {
   PspBundleDetails? get selectedBundle => _selectedBundle;
   int _currentPage = 0;
   bool _hasMore = true;
+  bool get hasMoreBundles => _hasMore;
 
   String? _nameFilter;
 
@@ -86,16 +93,92 @@ class ApiProvider with ChangeNotifier {
       result = result.where((bundle) {
         final pspCode = bundle.idPsp?.toLowerCase() ?? '';
         final pspName = bundle.pspBusinessName?.toLowerCase() ?? pspCode;
-        var filter = _pspFilter!.toLowerCase();
+        var filter = _pspFilter!.trim().toLowerCase();
         return pspName.contains(filter) || pspCode.contains(filter);
       }).toList();
     }
-    return result.where((bundle) {
-      if (!bundleFilters.matchesBundle(bundle, DateTime.now())) return false;
-      if (bundleFilters['ci'].isEmpty) return true;
-      return bundle.type == 'GLOBAL' ||
-          ciAssociations.any((item) => item['idBundle'] == bundle.idBundle);
-    }).toList();
+    return result
+        .where((bundle) => _matchesBundle(
+            bundle, bundleFilters, ciAssociations, DateTime.now()))
+        .toList();
+  }
+
+  // Lista ed export condividono la stessa selezione locale, inclusa l'eccezione
+  // GLOBAL: l'assenza di un'adesione ente non ne implica la non applicabilita.
+  bool _matchesBundle(PspBundleDetails bundle, CatalogFilters filters,
+          List<Map<String, dynamic>> associations, DateTime now) =>
+      filters.matchesBundle(bundle, now) &&
+      (filters['ci'].isEmpty ||
+          bundle.type == 'GLOBAL' ||
+          associations.any((item) => item['idBundle'] == bundle.idBundle));
+
+  void applyMethodFilters(Map<String, String> values) {
+    methodFilters = CatalogFilters(values);
+    notifyListeners();
+  }
+
+  /// Fotografa filtri e ambiente al click. Legge tutte le pagine separatamente
+  /// dall'infinite scroll, senza cambiare posizione, record o filtri della lista.
+  Future<String> exportBundlesCsv() async {
+    final filters = bundleFilters;
+    final name = _nameFilter;
+    final types =
+        List<String>.of(_typesFilter ?? ['GLOBAL', 'PUBLIC', 'PRIVATE']);
+    final psp = _pspFilter;
+    final active = _statusFilter == BundleStatusFilter.active ? true : null;
+    final generation = _environmentGeneration;
+    final now = DateTime.now();
+    final associations = <Map<String, dynamic>>[];
+    void checkEnvironment() {
+      if (_disposed || generation != _environmentGeneration) {
+        throw StateError('Ambiente cambiato durante l\'export. Riprovare.');
+      }
+    }
+
+    if (filters['ci'].isNotEmpty) {
+      var page = 0;
+      var totalPages = 1;
+      do {
+        final response = await _apiService.getMarketplaceResource(
+            ['cis', filters['ci'], 'bundles'],
+            page: page);
+        checkEnvironment();
+        associations.addAll((response['bundles'] as List)
+            .map((item) => Map<String, dynamic>.from(item as Map)));
+        totalPages = (response['pageInfo'] as Map)['totalPages'] as int;
+        page++;
+      } while (page < totalPages);
+    }
+    final records = <PspBundleDetails>[];
+    final ids = <String>{};
+    var page = 0;
+    var totalPages = 1;
+    do {
+      final response = await _apiService.getBundles(
+          page: page, limit: 100, name: name, types: types, active: active);
+      checkEnvironment();
+      for (final bundle in response.bundles) {
+        if ((psp == null ||
+                psp.trim().isEmpty ||
+                containsText(bundle.idPsp, psp) ||
+                containsText(bundle.pspBusinessName, psp)) &&
+            _matchesBundle(bundle, filters, associations, now) &&
+            (bundle.idBundle == null || ids.add(bundle.idBundle!))) {
+          records.add(bundle);
+        }
+      }
+      totalPages = response.pageInfo.totalPages;
+      page++;
+    } while (page < totalPages);
+    // Un errore intermedio viene propagato: non generiamo mai un CSV parziale.
+    return CatalogCsv.bundles(records);
+  }
+
+  Future<String> exportPaymentMethodsCsv() async {
+    if (methodsLoading || methodsError != null) {
+      throw StateError('Attendere il caricamento completo dei metodi.');
+    }
+    return CatalogCsv.methods(filteredPaymentMethods);
   }
 
   List<String> get uniquePspNames {
@@ -117,6 +200,7 @@ class ApiProvider with ChangeNotifier {
 
     _jwt = jwt;
     _host = host;
+    _environmentGeneration++;
 
     _apiService.setAuthToken(_jwt);
     _apiService.setHost(_host);
@@ -232,7 +316,9 @@ class ApiProvider with ChangeNotifier {
     }
 
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
+    final previousMatchCount = filteredBundles.length;
 
     bool? active;
 
@@ -241,7 +327,7 @@ class ApiProvider with ChangeNotifier {
     }
 
     try {
-      if (bundleFilters['ci'].isNotEmpty) {
+      if (isRefresh && bundleFilters['ci'].isNotEmpty) {
         var page = 0;
         var total = 1;
         do {
@@ -255,10 +341,12 @@ class ApiProvider with ChangeNotifier {
           page++;
         } while (page < total);
       }
+      // Ogni scroll carica un nuovo gruppo di risultati. Le pagine escluse dai
+      // filtri locali vengono saltate finche arriva un match o finiscono i dati.
       do {
         final response = await _apiService.getBundles(
             page: _currentPage,
-            limit: 100,
+            limit: 20,
             name: _nameFilter,
             types: _typesFilter ?? ['GLOBAL', 'PUBLIC', 'PRIVATE'],
             active: active);
@@ -272,8 +360,8 @@ class ApiProvider with ChangeNotifier {
         _hasMore = _currentPage < bundleTotalPages;
         notifyListeners();
         if (generation != _bundleGeneration) return;
-      } while (_hasMore);
-      bundlesComplete = true;
+      } while (_hasMore && filteredBundles.length == previousMatchCount);
+      bundlesComplete = !_hasMore;
     } catch (e) {
       if (generation == _bundleGeneration) _errorMessage = e.toString();
     } finally {

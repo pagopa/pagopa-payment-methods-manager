@@ -57,44 +57,92 @@ class WidgetApi extends ApiService {
       throw StateError('detail failure');
 }
 
+class PagedWidgetApi extends WidgetApi {
+  final List<int> requestedPages = [];
+
+  @override
+  Future<BundlesResponse> getBundles({
+    int page = 0,
+    int limit = 20,
+    String? name,
+    List<String>? types,
+    DateTime? validFrom,
+    DateTime? expireAt,
+    bool? active,
+  }) async {
+    requestedPages.add(page);
+    return BundlesResponse(
+      pageInfo:
+          PageInfo(page: page, limit: limit, itemsFound: 20, totalPages: 2),
+      bundles: List.generate(
+          20,
+          (index) => PspBundleDetails(
+                idBundle: '$page-$index',
+                name: 'Bundle $page-$index',
+                type: 'GLOBAL',
+              )),
+    );
+  }
+}
+
 Widget wrap(Widget child, ApiProvider provider) => ChangeNotifierProvider.value(
       value: provider,
       child: MaterialApp(home: child),
     );
 
 void main() {
-  testWidgets(
-      'method filter applies and resets without losing management actions',
+  testWidgets('scrolling loads the next batch without pagination controls',
       (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = PagedWidgetApi();
+    final provider = ApiProvider(apiService: api);
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(wrap(const BundleListScreen(), provider));
+    await tester.pumpAndSettle();
+    expect(api.requestedPages, [0]);
+    await tester.drag(find.byType(ListView), const Offset(0, -1800));
+    await tester.pumpAndSettle();
+    expect(api.requestedPages, [0, 1]);
+    expect(provider.filteredBundles, hasLength(40));
+    expect(find.textContaining('pagine'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('payment methods retain management actions', (tester) async {
     tester.view.reset();
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final provider = ApiProvider(apiService: WidgetApi());
     addTearDown(provider.dispose);
+    provider.updateConfig(jwt: 'test-token', host: 'https://example.test');
     await provider.fetchPaymentMethods();
     await tester.pumpWidget(wrap(const PaymentListScreen(), provider));
     expect(find.text('Nuovo'), findsOneWidget);
+    expect(find.text('Esporta CSV'), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline), findsNWidgets(2));
-    await tester.tap(find.text('Filtri di ricerca'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Nome o ID metodo'), 'IO method');
-    await tester.tap(find.text('Applica'));
-    await tester.pumpAndSettle();
     expect(
         find.byWidgetPredicate(
             (widget) => widget is Text && widget.data == 'IO method'),
         findsOneWidget);
-    expect(find.text('Checkout method'), findsNothing);
-    await tester.tap(find.text('Resetta'));
-    await tester.pumpAndSettle();
     expect(find.text('Checkout method'), findsOneWidget);
+    await tester.tap(find.text('Filtri di ricerca'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Nome o ID metodo'), 'IO method');
+    await tester.ensureVisible(find.text('Applica'));
+    await tester.tap(find.text('Applica'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checkout method'), findsNothing);
+    expect(await provider.exportPaymentMethodsCsv(),
+        isNot(contains('checkout-method')));
     expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-      'bundle list reports complete pagination and displays configured fee',
+      'bundle list displays fee and ID filter without pagination or filter summary',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
@@ -103,11 +151,21 @@ void main() {
     addTearDown(provider.dispose);
     await tester.pumpWidget(wrap(const BundleListScreen(), provider));
     await tester.pumpAndSettle();
-    expect(find.textContaining('ricerca completa'), findsOneWidget);
+    expect(find.textContaining('ricerca completa'), findsNothing);
+    expect(find.textContaining('pagine'), findsNothing);
     expect(find.text('Bundle name'), findsOneWidget);
+    expect(find.text('Esporta CSV'), findsOneWidget);
     expect(find.textContaining('1,00 EUR'), findsOneWidget);
     await tester.tap(find.text('Filtri di ricerca'));
     await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'ID pacchetto'), 'id');
+    await tester.ensureVisible(find.text('Applica'));
+    await tester.tap(find.text('Applica'));
+    await tester.pumpAndSettle();
+    expect(provider.bundleFilters['id'], 'id');
+    expect(tester.widget<ExpansionTile>(find.byType(ExpansionTile)).subtitle,
+        isNull);
     expect(tester.takeException(), isNull);
   });
 
@@ -122,35 +180,30 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('tabs preserve applied method filters across navigation',
+  testWidgets('tabs preserve applied bundle filters across navigation',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final provider = ApiProvider(apiService: WidgetApi());
     addTearDown(provider.dispose);
-    await provider.fetchPaymentMethods();
     await tester.pumpWidget(wrap(const Structure(), provider));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Metodi di Pagamento'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Filtri di ricerca').last);
+    await tester.tap(find.text('Filtri di ricerca'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Nome o ID metodo'), 'IO method');
-    await tester.tap(find.text('Applica').last);
+        find.widgetWithText(TextFormField, 'ID pacchetto'), 'id');
+    await tester.ensureVisible(find.text('Applica'));
+    await tester.tap(find.text('Applica'));
     await tester.pumpAndSettle();
     expect(find.byType(Tab), findsNWidgets(2));
     expect(find.text('Confronto IO / CHECKOUT'), findsNothing);
-    await tester.tap(find.text('Pacchetti Commissionali'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Metodi di Pagamento'));
     await tester.pumpAndSettle();
-    expect(
-        find.byWidgetPredicate(
-            (widget) => widget is Text && widget.data == 'IO method'),
-        findsOneWidget);
-    expect(find.text('Checkout method'), findsNothing);
+    await tester.tap(find.text('Pacchetti Commissionali'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bundle name'), findsOneWidget);
+    expect(provider.bundleFilters['id'], 'id');
     expect(tester.takeException(), isNull);
   });
 }

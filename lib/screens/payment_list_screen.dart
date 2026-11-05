@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../models/payment_method.dart';
 import '../providers/api_provider.dart';
+import '../widget/catalog_filter_panel.dart';
+import '../widget/csv_export_button.dart';
 import 'payment_form_screen.dart';
 
 class PaymentListScreen extends StatefulWidget {
@@ -12,7 +14,11 @@ class PaymentListScreen extends StatefulWidget {
   State<PaymentListScreen> createState() => _PaymentListScreenState();
 }
 
-class _PaymentListScreenState extends State<PaymentListScreen> {
+class _PaymentListScreenState extends State<PaymentListScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
@@ -145,6 +151,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -159,6 +166,14 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
               children: [
                 Text('Gestisci i metodi di pagamento',
                     style: textTheme.titleLarge),
+                Consumer<ApiProvider>(
+                  builder: (context, provider, _) => CsvExportButton(
+                    filename: 'metodi-pagamento.csv',
+                    createCsv: provider.exportPaymentMethodsCsv,
+                    enabled: !provider.methodsLoading &&
+                        provider.methodsError == null,
+                  ),
+                ),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.add_circle_outline, size: 18),
                   label: const Text('Nuovo'),
@@ -167,21 +182,60 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
               ],
             ),
             const SizedBox(height: 24),
+            // Gli stessi filtri applicati alla tabella selezionano i record CSV.
+            CatalogFilterPanel(
+              fields: const [
+                FilterField('search', 'Nome o ID metodo'),
+                FilterField('touchpoint', 'Touchpoint',
+                    options: ['IO', 'CHECKOUT', 'CHECKOUT_CART']),
+                FilterField('management', 'Gestione', options: [
+                  'REDIRECT',
+                  'ONBOARDABLE',
+                  'ONBOARDABLE_ONLY',
+                  'NOT_ONBOARDABLE'
+                ]),
+                FilterField('status', 'Stato',
+                    options: ['ENABLED', 'DISABLED', 'MAINTENANCE']),
+                FilterField('group', 'Gruppo'),
+                FilterField('category', 'Categoria',
+                    options: ['CARTE', 'CONTO', 'APP']),
+                FilterField('device', 'Device',
+                    options: ['IOS', 'ANDROID', 'WEB', 'SAFARI']),
+              ],
+              onApply: context.read<ApiProvider>().applyMethodFilters,
+            ),
+            const SizedBox(height: 12),
             Expanded(
               child: Card(
                 clipBehavior: Clip.antiAlias,
                 child: Consumer<ApiProvider>(
                   builder: (context, provider, child) {
-                    if (provider.isLoading && provider.paymentMethods.isEmpty) {
+                    final methods = provider.filteredPaymentMethods;
+                    if (provider.methodsLoading &&
+                        provider.paymentMethods.isEmpty) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    if (provider.errorMessage != null) {
+                    if (provider.methodsError != null) {
                       return Center(
-                          child: Text('Errore: ${provider.errorMessage}'));
+                          child: Text('Errore: ${provider.methodsError}'));
                     }
-                    if (provider.paymentMethods.isEmpty) {
-                      return const Center(
-                          child: Text('Nessun metodo di pagamento trovato.'));
+                    if (methods.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Nessun metodo di pagamento trovato.'),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: provider.methodsLoading
+                                  ? null
+                                  : () => provider.fetchPaymentMethods(),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Ricarica metodi'),
+                            ),
+                          ],
+                        ),
+                      );
                     }
 
                     return Column(
@@ -189,9 +243,9 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
                         _buildHeader(),
                         Expanded(
                           child: ListView.builder(
-                            itemCount: provider.paymentMethods.length,
+                            itemCount: methods.length,
                             itemBuilder: (context, index) {
-                              final method = provider.paymentMethods[index];
+                              final method = methods[index];
                               return _buildDataRow(method);
                             },
                           ),

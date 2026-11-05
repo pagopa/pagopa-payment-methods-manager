@@ -1,13 +1,59 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 
 import '../api/api_service.dart';
+import '../export/catalog_csv.dart';
+import '../models/catalog_filters.dart';
 import '../models/payment_method.dart';
 
 enum BundleStatusFilter { all, active, future, expired }
 
 class ApiProvider with ChangeNotifier {
-  final ApiService _apiService = ApiService();
+  ApiProvider({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  final ApiService _apiService;
+  bool methodsLoading = false;
+  String? methodsError;
+  bool detailLoading = false;
+  String? detailError;
+  int _bundleGeneration = 0;
+  int _methodGeneration = 0;
+  int _detailGeneration = 0;
+  String? _selectedBundleId;
+  bool bundlesComplete = false;
+  int bundlePagesLoaded = 0;
+  int bundleTotalPages = 0;
+  CatalogFilters bundleFilters = CatalogFilters();
+  List<Map<String, dynamic>> ciAssociations = [];
+  List<Map<String, dynamic>> selectedCiAttributes = [];
+  String? selectedCiError;
+  bool selectedCiLoading = false;
+  bool _disposed = false;
+  int _ciGeneration = 0;
+  int _environmentGeneration = 0;
+  String? _selectedCi;
+  CatalogFilters methodFilters = CatalogFilters();
+
+  List<PaymentMethod> get filteredPaymentMethods =>
+      _paymentMethods.where(methodFilters.matchesMethod).toList();
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _bundleGeneration++;
+    _methodGeneration++;
+    _detailGeneration++;
+    _ciGeneration++;
+    _environmentGeneration++;
+    super.dispose();
+  }
 
   String _jwt = '';
   String _host = '';
@@ -22,12 +68,19 @@ class ApiProvider with ChangeNotifier {
 
   List<PaymentMethod> get paymentMethods => _paymentMethods;
 
-  List<PspBundleDetails> _bundles = [];
+  final List<PspBundleDetails> _bundles = [];
+  final Set<String> _bundleIds = {};
+  final List<PspBundleDetails> _filteredBundles = [];
+  late final List<PspBundleDetails> _filteredBundlesView =
+      UnmodifiableListView(_filteredBundles);
+  DateTime? _filteredBundlesDay;
   PspBundleDetails? _selectedBundle;
 
   PspBundleDetails? get selectedBundle => _selectedBundle;
   int _currentPage = 0;
   bool _hasMore = true;
+
+  bool get hasMoreBundles => _hasMore;
 
   String? _nameFilter;
 
@@ -43,17 +96,103 @@ class ApiProvider with ChangeNotifier {
   String? get pspFilter => _pspFilter;
 
   List<PspBundleDetails> get filteredBundles {
-    List<PspBundleDetails> result = List.from(_bundles);
+    _ensureFilteredBundles(DateTime.now());
+    return _filteredBundlesView;
+  }
 
-    if (_pspFilter != null && _pspFilter!.isNotEmpty) {
-      result = result.where((bundle) {
-        final pspCode = bundle.idPsp?.toLowerCase() ?? '';
-        final pspName = bundle.pspBusinessName?.toLowerCase() ?? pspCode;
-        var filter = _pspFilter!.toLowerCase();
-        return pspName.contains(filter);
-      }).toList();
+  void _ensureFilteredBundles(DateTime now) {
+    final today = DateUtilsForFilters.day(now);
+    if (_filteredBundlesDay == today) return;
+
+    _filteredBundles
+      ..clear()
+      ..addAll(_bundles.where((bundle) => _matchesCurrentFilters(bundle, now)));
+    _filteredBundlesDay = today;
+  }
+
+  bool _matchesCurrentFilters(PspBundleDetails bundle, DateTime now) =>
+      (_pspFilter == null ||
+          _pspFilter!.trim().isEmpty ||
+          containsText(bundle.idPsp, _pspFilter!) ||
+          containsText(bundle.pspBusinessName, _pspFilter!)) &&
+      _matchesBundle(bundle, bundleFilters, ciAssociations, now);
+
+  // Lista ed export condividono la stessa selezione locale, inclusa l'eccezione
+  // GLOBAL: l'assenza di un'adesione ente non ne implica la non applicabilita.
+  bool _matchesBundle(PspBundleDetails bundle, CatalogFilters filters,
+          List<Map<String, dynamic>> associations, DateTime now) =>
+      filters.matchesBundle(bundle, now) &&
+      (filters['ci'].isEmpty ||
+          bundle.type == 'GLOBAL' ||
+          associations.any((item) => item['idBundle'] == bundle.idBundle));
+
+  void applyMethodFilters(Map<String, String> values) {
+    methodFilters = CatalogFilters(values);
+    notifyListeners();
+  }
+
+  /// Fotografa filtri e ambiente al click. Legge tutte le pagine separatamente
+  /// dall'infinite scroll, senza cambiare posizione, record o filtri della lista.
+  Future<String> exportBundlesCsv() async {
+    final filters = bundleFilters;
+    final name = _nameFilter;
+    final types =
+        List<String>.of(_typesFilter ?? ['GLOBAL', 'PUBLIC', 'PRIVATE']);
+    final psp = _pspFilter;
+    final active = _statusFilter == BundleStatusFilter.active ? true : null;
+    final generation = _environmentGeneration;
+    final now = DateTime.now();
+    final associations = <Map<String, dynamic>>[];
+    void checkEnvironment() {
+      if (_disposed || generation != _environmentGeneration) {
+        throw StateError('Ambiente cambiato durante l\'export. Riprovare.');
+      }
     }
-    return result;
+
+    if (filters['ci'].isNotEmpty) {
+      var page = 0;
+      var totalPages = 1;
+      do {
+        final response = await _apiService.getMarketplaceResource(
+            ['cis', filters['ci'], 'bundles'],
+            page: page);
+        checkEnvironment();
+        associations.addAll((response['bundles'] as List)
+            .map((item) => Map<String, dynamic>.from(item as Map)));
+        totalPages = (response['pageInfo'] as Map)['totalPages'] as int;
+        page++;
+      } while (page < totalPages);
+    }
+    final records = <PspBundleDetails>[];
+    final ids = <String>{};
+    var page = 0;
+    var totalPages = 1;
+    do {
+      final response = await _apiService.getBundles(
+          page: page, limit: 100, name: name, types: types, active: active);
+      checkEnvironment();
+      for (final bundle in response.bundles) {
+        if ((psp == null ||
+                psp.trim().isEmpty ||
+                containsText(bundle.idPsp, psp) ||
+                containsText(bundle.pspBusinessName, psp)) &&
+            _matchesBundle(bundle, filters, associations, now) &&
+            (bundle.idBundle == null || ids.add(bundle.idBundle!))) {
+          records.add(bundle);
+        }
+      }
+      totalPages = response.pageInfo.totalPages;
+      page++;
+    } while (page < totalPages);
+    // Un errore intermedio viene propagato: non generiamo mai un CSV parziale.
+    return CatalogCsv.bundles(records);
+  }
+
+  Future<String> exportPaymentMethodsCsv() async {
+    if (methodsLoading || methodsError != null) {
+      throw StateError('Attendere il caricamento completo dei metodi.');
+    }
+    return CatalogCsv.methods(filteredPaymentMethods);
   }
 
   List<String> get uniquePspNames {
@@ -71,32 +210,51 @@ class ApiProvider with ChangeNotifier {
   }
 
   void updateConfig({required String jwt, required String host}) {
+    if (_jwt == jwt && _host == host) return;
 
+    final bundleId = _selectedBundleId;
+    final ci = _selectedCi;
     _jwt = jwt;
     _host = host;
+    _environmentGeneration++;
 
     _apiService.setAuthToken(_jwt);
     _apiService.setHost(_host);
 
+    _methodGeneration++;
+    _detailGeneration++;
+    _ciGeneration++;
+    _paymentMethods = [];
+    _selectedBundle = null;
+    detailLoading = false;
+    selectedCiLoading = false;
+    selectedCiAttributes = [];
+    selectedCiError = null;
+    detailError = null;
     fetchMoreBundles(isRefresh: true);
     fetchPaymentMethods();
+    if (bundleId != null) {
+      fetchBundleDetails(bundleId);
+      if (ci != null && ci.isNotEmpty) fetchCiAttributes(ci, bundleId);
+    }
   }
 
   Future<void> fetchPaymentMethods() async {
-    _isLoading = true;
-    _errorMessage = null;
+    final generation = ++_methodGeneration;
+    methodsLoading = true;
+    methodsError = null;
     notifyListeners();
 
     try {
-      if (_jwt.isNotEmpty) {
-        _paymentMethods = await _apiService.getPaymentMethods();
-        _errorMessage = null;
-      }
+      final methods = await _apiService.getPaymentMethods();
+      if (generation == _methodGeneration) _paymentMethods = methods;
     } catch (e) {
-      _errorMessage = e.toString();
+      if (generation == _methodGeneration) methodsError = e.toString();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _methodGeneration) {
+        methodsLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -105,7 +263,7 @@ class ApiProvider with ChangeNotifier {
       await _apiService.createPaymentMethod(method);
       await fetchPaymentMethods();
     } catch (e) {
-      _errorMessage = e.toString();
+      methodsError = e.toString();
       notifyListeners();
       rethrow;
     }
@@ -117,7 +275,7 @@ class ApiProvider with ChangeNotifier {
       await _apiService.updatePaymentMethod(id, method);
       await fetchPaymentMethods();
     } catch (e) {
-      _errorMessage = e.toString();
+      methodsError = e.toString();
       notifyListeners();
       rethrow;
     }
@@ -128,72 +286,169 @@ class ApiProvider with ChangeNotifier {
       await _apiService.deletePaymentMethod(id);
       await fetchPaymentMethods();
     } catch (e) {
-      _errorMessage = e.toString();
+      methodsError = e.toString();
       notifyListeners();
       rethrow;
     }
   }
 
   Future<void> fetchBundleDetails(String bundleId) async {
-    _isLoading = true;
+    final generation = ++_detailGeneration;
+    _selectedBundleId = bundleId;
+    _selectedCi = null;
+    detailLoading = true;
     _selectedBundle = null;
-    _errorMessage = null;
+    detailError = null;
+    _ciGeneration++;
+    selectedCiAttributes = [];
+    selectedCiError = null;
+    selectedCiLoading = false;
     notifyListeners();
 
     try {
-      _selectedBundle = await _apiService.getBundleDetails(bundleId);
-      _errorMessage = null;
+      final bundle = await _apiService.getBundleDetails(bundleId);
+      if (generation == _detailGeneration) {
+        _selectedBundle = bundle;
+      }
     } catch (e) {
-      _errorMessage = e.toString();
+      if (generation == _detailGeneration) detailError = e.toString();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _detailGeneration) {
+        detailLoading = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<void> fetchMoreBundles({bool isRefresh = false}) async {
+    if (!isRefresh && (_isLoading || !_hasMore)) return;
+    final generation = ++_bundleGeneration;
     if (isRefresh) {
       _currentPage = 0;
-      _bundles = [];
+      _bundles.clear();
+      _bundleIds.clear();
+      _filteredBundles.clear();
+      _filteredBundlesDay = DateUtilsForFilters.day(DateTime.now());
       _hasMore = true;
       _errorMessage = null;
+      bundlesComplete = false;
+      bundlePagesLoaded = 0;
+      bundleTotalPages = 0;
+      ciAssociations = [];
     }
 
-    if (_isLoading || !_hasMore) return;
-
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
+    final previousMatchCount = filteredBundles.length;
 
-    DateTime? validFrom;
-    DateTime? expireAt;
-    final now = DateTime.now();
     bool? active;
 
     if (_statusFilter == BundleStatusFilter.active) {
       active = true;
-    } else if (_statusFilter == BundleStatusFilter.expired) {
-      expireAt = now.subtract(const Duration(days: 1));
-    } else if (_statusFilter == BundleStatusFilter.future) {
-      validFrom = now.add(const Duration(days: 1));
     }
 
     try {
-      final response = await _apiService.getBundles(
-          page: _currentPage,
-          name: _nameFilter,
-          types: _typesFilter,
-          validFrom: validFrom,
-          expireAt: expireAt,
-          active: active);
-      _bundles.addAll(response.bundles);
-      _currentPage++;
-      _hasMore = _bundles.length <
-          (response.pageInfo.total_items ?? _bundles.length + 1);
+      if (isRefresh && bundleFilters['ci'].isNotEmpty) {
+        var page = 0;
+        var total = 1;
+        do {
+          final data = await _apiService.getMarketplaceResource(
+              ['cis', bundleFilters['ci'], 'bundles'],
+              page: page);
+          if (generation != _bundleGeneration) return;
+          ciAssociations.addAll((data['bundles'] as List)
+              .map((item) => Map<String, dynamic>.from(item as Map)));
+          total = (data['pageInfo'] as Map)['totalPages'] as int;
+          page++;
+        } while (page < total);
+      }
+      // Ogni scroll carica un nuovo gruppo di risultati. Le pagine escluse dai
+      // filtri locali vengono saltate finche arriva un match o finiscono i dati.
+      do {
+        final response = await _apiService.getBundles(
+            page: _currentPage,
+            limit: 20,
+            name: _nameFilter,
+            types: _typesFilter ?? ['GLOBAL', 'PUBLIC', 'PRIVATE'],
+            active: active);
+        if (generation != _bundleGeneration) return;
+        final now = DateTime.now();
+        _ensureFilteredBundles(now);
+        for (final bundle in response.bundles) {
+          final id = bundle.idBundle;
+          if (id != null && !_bundleIds.add(id)) {
+            continue;
+          }
+          _bundles.add(bundle);
+          if (_matchesCurrentFilters(bundle, now)) {
+            _filteredBundles.add(bundle);
+          }
+        }
+        _currentPage++;
+        bundlePagesLoaded = _currentPage;
+        bundleTotalPages = response.pageInfo.totalPages;
+        _hasMore = _currentPage < bundleTotalPages;
+        notifyListeners();
+        if (generation != _bundleGeneration) return;
+      } while (_hasMore && filteredBundles.length == previousMatchCount);
+      bundlesComplete = !_hasMore;
     } catch (e) {
-      _errorMessage = e.toString();
+      if (generation == _bundleGeneration) _errorMessage = e.toString();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _bundleGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  void stopBundleSearch() {
+    _bundleGeneration++;
+    _isLoading = false;
+    _hasMore = false;
+    bundlesComplete = false;
+    notifyListeners();
+  }
+
+  void applyBundleFilters(Map<String, String> values) {
+    bundleFilters = CatalogFilters(values);
+    final name = bundleFilters['name'];
+    _nameFilter = name.isEmpty ? null : name;
+    final type = bundleFilters['type'];
+    _typesFilter = type.isEmpty ? null : [type];
+    final psp = bundleFilters['psp'];
+    _pspFilter = psp.isEmpty ? null : psp;
+    _statusFilter = switch (bundleFilters['status']) {
+      'active' => BundleStatusFilter.active,
+      'future' => BundleStatusFilter.future,
+      'expired' => BundleStatusFilter.expired,
+      _ => BundleStatusFilter.all,
+    };
+    fetchMoreBundles(isRefresh: true);
+  }
+
+  Future<void> fetchCiAttributes(String ci, String bundleId) async {
+    _selectedCi = ci;
+    selectedCiLoading = true;
+    selectedCiError = null;
+    selectedCiAttributes = [];
+    final generation = ++_ciGeneration;
+    notifyListeners();
+    try {
+      final data = await _apiService.getMarketplaceResource(
+          ['cis', ci, 'bundles', bundleId, 'attributes']);
+      if (generation != _ciGeneration) return;
+      selectedCiAttributes = (data['attributes'] as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    } catch (e) {
+      if (generation == _ciGeneration) selectedCiError = e.toString();
+    } finally {
+      if (generation == _ciGeneration) {
+        selectedCiLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -212,6 +467,7 @@ class ApiProvider with ChangeNotifier {
     _typesFilter = types;
     _statusFilter = status ?? BundleStatusFilter.all;
     _pspFilter = psp;
+    _filteredBundlesDay = null;
 
     if (apiFiltersChanged) {
       fetchMoreBundles(isRefresh: true);

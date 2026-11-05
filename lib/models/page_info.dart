@@ -8,16 +8,17 @@ class PageInfo {
   final int limit;
   final int itemsFound;
   final int totalPages;
-  final int total_items;
+  final int? total_items;
 
   PageInfo({
     required this.page,
     required this.limit,
     required this.itemsFound,
     required this.totalPages,
-    required this.total_items,
+    this.total_items,
   });
 
-  factory PageInfo.fromJson(Map<String, dynamic> json) => _$PageInfoFromJson(json);
+  factory PageInfo.fromJson(Map<String, dynamic> json) =>
+      _$PageInfoFromJson(json);
   Map<String, dynamic> toJson() => _$PageInfoToJson(this);
 }

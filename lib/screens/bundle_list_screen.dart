@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../models/psp_bundle_details.dart';
 import '../providers/api_provider.dart';
 import 'bundle_detail_screen.dart';
+import '../models/catalog_filters.dart';
+import '../widget/catalog_filter_panel.dart';
+import '../widget/csv_export_button.dart';
 
 class BundleListScreen extends StatefulWidget {
   const BundleListScreen({super.key});
@@ -10,162 +13,100 @@ class BundleListScreen extends StatefulWidget {
   State<BundleListScreen> createState() => _BundleListScreenState();
 }
 
-class _BundleListScreenState extends State<BundleListScreen> {
+class _BundleListScreenState extends State<BundleListScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final ScrollController _scrollController = ScrollController();
-  final TextEditingController _nameFilterController = TextEditingController();
-  final TextEditingController _pspFilterController = TextEditingController();
-
-  String? _selectedType;
-  BundleStatusFilter _selectedStatus = BundleStatusFilter.all;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_loadNearEnd);
     final provider = Provider.of<ApiProvider>(context, listen: false);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      provider.fetchMoreBundles(isRefresh: true);
-    });
-
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
-        provider.fetchMoreBundles();
+      if (mounted && !provider.isLoading && provider.bundlePagesLoaded == 0) {
+        provider.fetchMoreBundles(isRefresh: true);
       }
     });
+  }
+
+  void _loadNearEnd() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final provider = context.read<ApiProvider>();
+    if (_scrollController.position.extentAfter < 300 &&
+        provider.hasMoreBundles &&
+        !provider.isLoading &&
+        provider.errorMessage == null) {
+      provider.fetchMoreBundles();
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-    _nameFilterController.dispose();
-    _pspFilterController.dispose();
     super.dispose();
-  }
-
-  void _applyFilters() {
-    FocusScope.of(context).unfocus();
-    Provider.of<ApiProvider>(context, listen: false).setFilters(
-      name: _nameFilterController.text,
-      psp: _pspFilterController.text,
-      types: _selectedType != null ? [_selectedType!] : null,
-      status: _selectedStatus,
-    );
-  }
-
-  void _resetFilters() {
-    _nameFilterController.clear();
-    _pspFilterController.clear();
-    setState(() {
-      _selectedType = null;
-      _selectedStatus = BundleStatusFilter.all;
-    });
-    Provider.of<ApiProvider>(context, listen: false).setFilters();
   }
 
   void _navigateToDetail(String bundleId) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => BundleDetailScreen(bundleId: bundleId)),
-    );
-  }
-
-  Widget _buildFilterPanel() {
-    return ExpansionTile(
-      title: const Text('Filtri di Ricerca'),
-      leading: const Icon(Icons.filter_list),
-      initiallyExpanded: false,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _nameFilterController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome Pacchetto',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _pspFilterController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome o ID PSP',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.business_center_outlined),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedType,
-                      decoration: const InputDecoration(labelText: 'Tipo', border: OutlineInputBorder()),
-                      items: ['GLOBAL', 'PUBLIC', 'PRIVATE']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
-                      onChanged: (val) => setState(() => _selectedType = val),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: DropdownButtonFormField<BundleStatusFilter>(
-                      value: _selectedStatus,
-                      decoration: const InputDecoration(labelText: 'Stato', border: OutlineInputBorder()),
-                      items: const [
-                        DropdownMenuItem(value: BundleStatusFilter.all, child: Text('Tutti')),
-                        DropdownMenuItem(value: BundleStatusFilter.active, child: Text('Attivo')),
-                        DropdownMenuItem(value: BundleStatusFilter.future, child: Text('Futuro')),
-                        DropdownMenuItem(value: BundleStatusFilter.expired, child: Text('Scaduto')),
-                      ],
-                      onChanged: (val) => setState(() => _selectedStatus = val!),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(onPressed: _resetFilters, child: const Text('Resetta')),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: _applyFilters,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Applica'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+      MaterialPageRoute(
+          builder: (context) => BundleDetailScreen(
+                bundleId: bundleId,
+                ci: context.read<ApiProvider>().bundleFilters['ci'],
+              )),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Pacchetti Commissionali')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Elenco Pacchetti', style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Elenco Pacchetti',
+                    style: Theme.of(context).textTheme.titleLarge),
+                CsvExportButton(
+                  filename: 'pacchetti.csv',
+                  createCsv: context.read<ApiProvider>().exportBundlesCsv,
+                ),
+              ],
             ),
             const SizedBox(height: 16),
-            _buildFilterPanel(),
+            CatalogFilterPanel(
+              fields: const [
+                FilterField('name', 'Nome pacchetto'),
+                FilterField('id', 'ID pacchetto'),
+                FilterField('psp', 'Nome o ID PSP'),
+                FilterField('type', 'Tipo',
+                    options: ['GLOBAL', 'PUBLIC', 'PRIVATE']),
+                FilterField('status', 'Stato',
+                    options: ['active', 'future', 'expired']),
+                FilterField('touchpoint', 'Touchpoint',
+                    options: ['IO', 'CHECKOUT', 'CHECKOUT_CART']),
+                FilterField('paymentType', 'Tipo pagamento (codice esatto)'),
+                FilterField('amount', 'Importo pagamento EUR', currency: true),
+                FilterField('minFee', 'Commissione minima EUR', currency: true),
+                FilterField('maxFee', 'Commissione massima EUR',
+                    currency: true),
+                FilterField('taxonomy', 'Tassonomia configurata (esatta)'),
+                FilterField('ci', 'Codice fiscale ente'),
+                FilterField('channel', 'Canale'),
+                FilterField('broker', 'Broker'),
+                FilterField('onUs', 'On-us', options: ['true', 'false']),
+                FilterField('cart', 'Carrello', options: ['true', 'false']),
+                FilterField('stamp', 'Bollo', options: ['true', 'false']),
+                FilterField('stampRestriction', 'Restrizione bollo',
+                    options: ['true', 'false']),
+              ],
+              onApply: context.read<ApiProvider>().applyBundleFilters,
+            ),
             const SizedBox(height: 16),
             Expanded(
               child: Card(
@@ -173,26 +114,56 @@ class _BundleListScreenState extends State<BundleListScreen> {
                 child: Consumer<ApiProvider>(
                   builder: (context, provider, child) {
                     final bundlesToDisplay = provider.filteredBundles;
+                    WidgetsBinding.instance
+                        .addPostFrameCallback((_) => _loadNearEnd());
 
+                    final progress = Column(
+                      children: [
+                        if (provider.isLoading && bundlesToDisplay.isEmpty)
+                          const LinearProgressIndicator(),
+                        if (provider.errorMessage != null)
+                          Text('Ricerca incompleta: ${provider.errorMessage}'),
+                        if (!provider.isLoading &&
+                            provider.errorMessage != null)
+                          TextButton(
+                            onPressed: () => provider.fetchMoreBundles(
+                                isRefresh: provider.bundlePagesLoaded == 0),
+                            child: const Text('Riprova'),
+                          ),
+                      ],
+                    );
                     if (provider.isLoading && bundlesToDisplay.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
+                      return progress;
                     }
-                    if (provider.errorMessage != null && bundlesToDisplay.isEmpty) {
-                      return Center(child: Text('Errore: ${provider.errorMessage}'));
+                    if (provider.errorMessage != null &&
+                        bundlesToDisplay.isEmpty) {
+                      return progress;
                     }
                     if (bundlesToDisplay.isEmpty && !provider.isLoading) {
-                      return const Center(child: Text('Nessun pacchetto trovato con i filtri attuali.'));
+                      return Column(children: [
+                        progress,
+                        Text(provider.bundlesComplete
+                            ? 'Nessun pacchetto trovato con i filtri attuali.'
+                            : 'Ricerca interrotta.'),
+                      ]);
                     }
 
                     return Column(
                       children: [
+                        progress,
                         _buildHeader(),
                         Expanded(
                           child: RefreshIndicator(
-                            onRefresh: () => provider.fetchMoreBundles(isRefresh: true),
+                            onRefresh: () =>
+                                provider.fetchMoreBundles(isRefresh: true),
                             child: ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               controller: _scrollController,
-                              itemCount: bundlesToDisplay.length + (provider.isLoading && bundlesToDisplay.isNotEmpty ? 1 : 0),
+                              itemCount: bundlesToDisplay.length +
+                                  (provider.isLoading &&
+                                          bundlesToDisplay.isNotEmpty
+                                      ? 1
+                                      : 0),
                               itemBuilder: (context, index) {
                                 if (index == bundlesToDisplay.length) {
                                   return const Center(
@@ -232,6 +203,10 @@ class _BundleListScreenState extends State<BundleListScreen> {
           Expanded(flex: 3, child: Text('NOME PACCHETTO', style: headerStyle)),
           Expanded(flex: 2, child: Text('PSP', style: headerStyle)),
           Expanded(flex: 1, child: Text('TIPO', style: headerStyle)),
+          Expanded(
+              flex: 3,
+              child: Text('TOUCHPOINT / PAGAMENTO / FEE / RANGE',
+                  style: headerStyle)),
           Expanded(flex: 2, child: Text('STATO', style: headerStyle)),
         ],
       ),
@@ -260,6 +235,12 @@ class _BundleListScreenState extends State<BundleListScreen> {
               child: Text(bundle.pspBusinessName ?? bundle.idPsp ?? 'N/D'),
             ),
             Expanded(flex: 1, child: Text(bundle.type ?? 'N/D')),
+            Expanded(
+              flex: 3,
+              child: Text(
+                  '${bundle.touchpoint ?? "N/D"} / ${bundle.paymentType ?? "N/D"}\n'
+                  '${money(bundle.paymentAmount)} / ${money(bundle.minPaymentAmount)} - ${money(bundle.maxPaymentAmount)}'),
+            ),
             Expanded(flex: 2, child: _buildStatusChip(bundle)),
           ],
         ),
@@ -268,21 +249,24 @@ class _BundleListScreenState extends State<BundleListScreen> {
   }
 
   Widget _buildStatusChip(PspBundleDetails bundle) {
-    final now = DateTime.now();
+    final today = DateUtilsForFilters.day(DateTime.now());
     String statusText = 'ATTIVO';
     Color color = Colors.green;
 
-    if (bundle.validityDateFrom != null && now.isBefore(bundle.validityDateFrom!)) {
+    if (bundle.validityDateFrom != null &&
+        DateUtilsForFilters.day(bundle.validityDateFrom!).isAfter(today)) {
       statusText = 'FUTURO';
       color = Colors.blue;
-    } else if (bundle.validityDateTo != null && now.isAfter(bundle.validityDateTo!)) {
+    } else if (bundle.validityDateTo != null &&
+        DateUtilsForFilters.day(bundle.validityDateTo!).isBefore(today)) {
       statusText = 'SCADUTO';
       color = Colors.grey;
     }
     return Align(
       alignment: Alignment.centerLeft,
       child: Chip(
-        label: Text(statusText, style: const TextStyle(color: Colors.white, fontSize: 10)),
+        label: Text(statusText,
+            style: const TextStyle(color: Colors.white, fontSize: 10)),
         backgroundColor: color,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

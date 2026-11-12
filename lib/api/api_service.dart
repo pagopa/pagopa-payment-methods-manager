@@ -8,6 +8,9 @@ import 'package:payment_methods_manager/models/psp_bundle_details.dart';
 import '../models/payment_method.dart';
 
 class ApiService {
+  ApiService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
   static const String _basePath = '/afm/marketplace-auth/v1';
 
   String _authToken = '';
@@ -29,15 +32,16 @@ class ApiService {
     return headers;
   }
 
-
   Future<List<PaymentMethod>> getPaymentMethods() async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('$_host$_basePath/payment-methods'),
       headers: _headers,
     );
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body) as List;
+      final decoded = json.decode(response.body);
+      final List<dynamic> data =
+          (decoded is String ? json.decode(decoded) : decoded) as List;
       return data.map((json) => PaymentMethod.fromJson(json)).toList();
     } else {
       throw Exception(
@@ -46,7 +50,7 @@ class ApiService {
   }
 
   Future<PaymentMethod> createPaymentMethod(PaymentMethod paymentMethod) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$_host$_basePath/payment-methods'),
       headers: _headers,
       body: json.encode(paymentMethod.toJson()),
@@ -62,7 +66,7 @@ class ApiService {
 
   Future<PaymentMethod> updatePaymentMethod(
       String id, PaymentMethod paymentMethod) async {
-    final response = await http.put(
+    final response = await _client.put(
       Uri.parse('$_host$_basePath/payment-methods/$id'),
       headers: _headers,
       body: json.encode(paymentMethod.toJson()),
@@ -77,7 +81,7 @@ class ApiService {
   }
 
   Future<void> deletePaymentMethod(String id) async {
-    final response = await http.delete(
+    final response = await _client.delete(
       Uri.parse('$_host$_basePath/payment-methods/$id'),
       headers: _headers,
     );
@@ -118,10 +122,12 @@ class ApiService {
       queryParameters['active'] = active.toString();
     }
 
-    final uri =
-        Uri.parse('$_host$_basePath/bundles').replace(queryParameters: queryParameters);
+    final uri = Uri.parse('$_host$_basePath/bundles')
+        .replace(queryParameters: queryParameters);
 
-    final response = await http.get(uri, headers: _headers);
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 45));
 
     if (response.statusCode == 200) {
       return BundlesResponse.fromJson(json.decode(response.body));
@@ -132,7 +138,9 @@ class ApiService {
 
   Future<PspBundleDetails> getBundleDetails(String bundleId) async {
     final uri = Uri.parse('$_host$_basePath/bundles/$bundleId');
-    final response = await http.get(uri, headers: _headers);
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 45));
 
     if (response.statusCode == 200) {
       return PspBundleDetails.fromJson(json.decode(response.body));
@@ -140,5 +148,21 @@ class ApiService {
       throw Exception(
           'Failed to load bundle details. Status: ${response.statusCode}');
     }
+  }
+
+  Future<Map<String, dynamic>> getMarketplaceResource(List<String> segments,
+      {int? page}) async {
+    final base = Uri.parse('$_host$_basePath');
+    final uri = base.replace(
+      pathSegments: [...base.pathSegments, ...segments],
+      queryParameters: page == null ? null : {'page': '$page', 'limit': '100'},
+    );
+    final response = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 45));
+    if (response.statusCode != 200) {
+      throw Exception('Marketplace: ${response.statusCode} ($uri)');
+    }
+    return json.decode(response.body) as Map<String, dynamic>;
   }
 }
